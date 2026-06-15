@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Inventarios — Toma de Inventarios Multi-punto
 
-## Getting Started
+Aplicación web mobile-first para digitalizar la toma de inventarios mensuales.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 (App Router) + TypeScript
+- PostgreSQL (Supabase) + Prisma ORM
+- NextAuth.js (Credentials + JWT)
+- Tailwind CSS
+- html5-qrcode (escaneo de códigos de barras)
+- exceljs (exportación/carga — próximas fases)
+
+## Configuración
+
+1. Copia las variables de entorno:
+
+```bash
+cp .env.example .env
+```
+
+2. Configura `DATABASE_URL` con tu connection string de Supabase Postgres.
+
+3. Genera `NEXTAUTH_SECRET`:
+
+```bash
+openssl rand -base64 32
+```
+
+4. Instala dependencias y prepara la base de datos:
+
+```bash
+npm install
+npm run db:migrate
+npm run db:seed
+```
+
+5. Inicia el servidor de desarrollo:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usuarios de prueba (seed)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Rol        | Email                      | Contraseña   |
+|------------|----------------------------|--------------|
+| Supervisor | supervisor@inventario.com  | Admin123!    |
+| Tomador    | tomador@inventario.com     | Tomador123!  |
 
-## Learn More
+El seed crea 8 puntos iniciales, 3 productos de demo y un inventario activo con una área asignada al tomador.
 
-To learn more about Next.js, take a look at the following resources:
+## Estructura de rutas
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+/app/(auth)/login          → Login
+/app/(tomador)/tomador     → Dashboard tomador
+/app/(tomador)/tomador/area/[id] → Conteo con escaneo
+/app/(supervisor)/supervisor     → Panel supervisor (placeholder)
+/app/api/*                 → API REST
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Estado del entregable inicial
 
-## Deploy on Vercel
+- [x] Proyecto Next.js + Tailwind + Prisma
+- [x] Schema Prisma completo
+- [x] NextAuth con Credentials Provider
+- [x] Migraciones + seed (8 puntos + supervisor)
+- [x] Middleware con protección por rol
+- [x] Login + dashboard tomador + escaneo + guardado de conteos
+- [x] **Fase 2:** CRUD Puntos y Áreas en `/supervisor/puntos`
+- [x] **Fase 3:** Catálogo de productos en `/supervisor/productos` (CRUD + Excel)
+- [x] **Fase 4:** Inventarios y asignaciones en `/supervisor/inventarios`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Fase 4 — Inventarios
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Crear inventario (una activa a la vez) con asignaciones PENDIENTE por cada área activa
+- Asignar tomadores por área (solo en estado PENDIENTE)
+- Cierre con bloqueo de conteos para el tomador
+- Migración: `usuarioId` opcional en asignaciones
+
+```bash
+npm run db:migrate
+```
+
+- `/supervisor/productos` — listado buscable/paginado, CRUD individual
+- Carga masiva `.xlsx` con upsert por código de barras y resumen de errores
+- Descarga de plantilla en `/api/productos/plantilla`
+- Soft-delete si el producto tiene conteos de inventario
+
+Aplicar migración:
+
+```bash
+npm run db:migrate
+```
+
+- `/supervisor/puntos` — listado, crear, editar y eliminar puntos
+- `/supervisor/puntos/[id]` — áreas del punto (CRUD)
+- Soft-delete (`activo: false`) si hay asignaciones/conteos de inventario
+- Eliminación física solo cuando no hay historial
+
+Aplicar migración nueva:
+
+```bash
+npm run db:migrate
+```
+- Carga masiva Excel
+- Gestión de inventarios y asignaciones
+- Reportes y exportación Excel
+- Gestión de usuarios
+
+## Despliegue en Vercel
+
+1. Conecta el repositorio a Vercel.
+2. Configura las variables `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`.
+3. Ejecuta migraciones contra la DB de producción antes del primer deploy.

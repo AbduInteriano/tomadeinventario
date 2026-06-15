@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERVISOR
+  TOMADOR
+}
+
+enum InventarioEstado {
+  ABIERTO
+  EN_PROCESO
+  CERRADO
+}
+
+enum AsignacionEstado {
+  PENDIENTE
+  EN_PROGRESO
+  COMPLETADA
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  nombre    String
+  role      Role     @default(TOMADOR)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asignaciones       AsignacionInventarioArea[]
+  conteos            ConteoInventario[]
+  noCatalogados      ProductoNoCatalogado[]
+  inventariosCreados Inventario[]
+
+  @@index([activo])
+}
+
+model Punto {
+  id        String   @id @default(cuid())
+  nombre    String
+  activo    Boolean  @default(true)
+  areas     Area[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([activo])
+}
+
+model Area {
+  id           String                     @id @default(cuid())
+  nombre       String
+  puntoId      String
+  activo       Boolean                    @default(true)
+  punto        Punto                      @relation(fields: [puntoId], references: [id], onDelete: Cascade)
+  asignaciones AsignacionInventarioArea[]
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+
+  @@index([puntoId])
+  @@index([activo])
+}
+
+model Producto {
+  id            String             @id @default(cuid())
+  codigoBarras  String             @unique
+  codigoInterno String?
+  descripcion   String
+  unidadMedida  String
+  categoria     String?
+  stockGlobal   Decimal            @default(0) @db.Decimal(12, 3)
+  activo        Boolean            @default(true)
+  conteos       ConteoInventario[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([codigoBarras])
+  @@index([activo])
+}
+
+model Inventario {
+  id          String                     @id @default(cuid())
+  estado      InventarioEstado           @default(ABIERTO)
+  creadoPorId String
+  creadoPor   User                       @relation(fields: [creadoPorId], references: [id])
+  asignaciones AsignacionInventarioArea[]
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+}
+
+model AsignacionInventarioArea {
+  id           String                 @id @default(cuid())
+  inventarioId String
+  areaId       String
+  usuarioId    String?
+  estado       AsignacionEstado       @default(PENDIENTE)
+  inventario   Inventario             @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
+  area         Area                   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  usuario      User?                  @relation(fields: [usuarioId], references: [id])
+  conteos      ConteoInventario[]
+  noCatalogados ProductoNoCatalogado[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@unique([inventarioId, areaId])
+  @@index([usuarioId])
+  @@index([inventarioId])
+}
+
+model ConteoInventario {
+  id              String                   @id @default(cuid())
+  asignacionId    String
+  productoId      String
+  cantidadContada Decimal                  @db.Decimal(12, 3)
+  usuarioId       String
+  timestamp       DateTime                 @default(now())
+  asignacion      AsignacionInventarioArea @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  producto        Producto                 @relation(fields: [productoId], references: [id])
+  usuario         User                     @relation(fields: [usuarioId], references: [id])
+
+  @@unique([asignacionId, productoId])
+  @@index([asignacionId])
+}
+
+model ProductoNoCatalogado {
+  id               String                   @id @default(cuid())
+  asignacionId     String
+  codigoEscaneado  String
+  descripcionLibre String
+  cantidad         Decimal                  @db.Decimal(12, 3)
+  usuarioId        String
+  timestamp        DateTime                 @default(now())
+  asignacion       AsignacionInventarioArea @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  usuario          User                     @relation(fields: [usuarioId], references: [id])
+
+  @@index([asignacionId])
+}
