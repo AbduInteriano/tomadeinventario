@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { FlashMessage } from "@/components/FlashMessage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
@@ -10,7 +11,20 @@ export interface ProductoItem {
   codigoInterno: string | null;
   descripcion: string;
   unidadMedida: string;
+  unidadMedidaId: string;
   categoria: string | null;
+  categoriaId: string | null;
+}
+
+interface CategoriaItem {
+  id: string;
+  nombre: string;
+}
+
+interface UnidadItem {
+  id: string;
+  nombre: string;
+  abreviatura: string;
 }
 
 interface GrupoCategoria {
@@ -42,8 +56,8 @@ const emptyForm = {
   codigoBarras: "",
   codigoInterno: "",
   descripcion: "",
-  unidadMedida: "UN",
-  categoria: "",
+  unidadMedidaId: "",
+  categoriaId: "",
 };
 
 export function ProductosClient() {
@@ -71,6 +85,25 @@ export function ProductosClient() {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [categorias, setCategorias] = useState<CategoriaItem[]>([]);
+  const [unidades, setUnidades] = useState<UnidadItem[]>([]);
+
+  async function loadCatalogo() {
+    const [catsRes, unidadesRes] = await Promise.all([
+      fetch("/api/categorias"),
+      fetch("/api/unidades-medida"),
+    ]);
+    if (catsRes.ok) setCategorias(await catsRes.json());
+    if (unidadesRes.ok) setUnidades(await unidadesRes.json());
+  }
+
+  useEffect(() => {
+    loadCatalogo();
+  }, []);
+
+  useEffect(() => {
+    if (showForm) loadCatalogo();
+  }, [showForm]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -122,7 +155,9 @@ export function ProductosClient() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyForm);
+    const defaultUnidad =
+      unidades.find((u) => u.abreviatura === "UN")?.id ?? unidades[0]?.id ?? "";
+    setForm({ ...emptyForm, unidadMedidaId: defaultUnidad });
     setShowForm(true);
   }
 
@@ -132,8 +167,8 @@ export function ProductosClient() {
       codigoBarras: producto.codigoBarras,
       codigoInterno: producto.codigoInterno ?? "",
       descripcion: producto.descripcion,
-      unidadMedida: producto.unidadMedida,
-      categoria: producto.categoria ?? "",
+      unidadMedidaId: producto.unidadMedidaId,
+      categoriaId: producto.categoriaId ?? "",
     });
     setShowForm(true);
   }
@@ -147,8 +182,8 @@ export function ProductosClient() {
       codigoBarras: form.codigoBarras,
       codigoInterno: form.codigoInterno || null,
       descripcion: form.descripcion,
-      unidadMedida: form.unidadMedida,
-      categoria: form.categoria || null,
+      unidadMedidaId: form.unidadMedidaId,
+      categoriaId: form.categoriaId || null,
     };
 
     const url = editing ? `/api/productos/${editing.id}` : "/api/productos";
@@ -282,6 +317,13 @@ export function ProductosClient() {
         <FlashMessage type={flash.type} message={flash.message} onDismiss={() => setFlash(null)} />
       )}
 
+      <Link
+        href="/supervisor/catalogo"
+        className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+      >
+        Gestionar <span className="font-semibold">categorías y unidades</span> →
+      </Link>
+
       <input
         type="search"
         value={q}
@@ -344,8 +386,48 @@ export function ProductosClient() {
             <Field label="Código de barras *" value={form.codigoBarras} onChange={(v) => setForm({ ...form, codigoBarras: v })} required />
             <Field label="Código interno" value={form.codigoInterno} onChange={(v) => setForm({ ...form, codigoInterno: v })} />
             <Field label="Descripción *" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} required />
-            <Field label="Unidad *" value={form.unidadMedida} onChange={(v) => setForm({ ...form, unidadMedida: v })} required />
-            <Field label="Categoría" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} />
+
+            <label className="block text-sm font-medium text-slate-700">
+              Unidad de medida *
+              <select
+                required
+                value={form.unidadMedidaId}
+                onChange={(e) => setForm({ ...form, unidadMedidaId: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
+              >
+                <option value="">Seleccionar…</option>
+                {unidades.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nombre} ({u.abreviatura})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Categoría
+              <select
+                value={form.categoriaId}
+                onChange={(e) => setForm({ ...form, categoriaId: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
+              >
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {(unidades.length === 0 || categorias.length === 0) && (
+              <p className="text-sm text-amber-800">
+                Falta configurar el catálogo.{" "}
+                <Link href="/supervisor/catalogo" className="font-medium underline">
+                  Crear categorías o unidades
+                </Link>
+              </p>
+            )}
           </div>
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-xl border py-3 font-medium">

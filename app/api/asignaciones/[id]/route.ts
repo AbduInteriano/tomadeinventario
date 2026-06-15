@@ -41,7 +41,13 @@ export async function GET(
   const [conteos, noCatalogados] = await Promise.all([
     prisma.conteoInventario.findMany({
       where: { asignacionId: asignacion.id },
-      include: { producto: true },
+      include: {
+        producto: {
+          include: {
+            unidadMedida: { select: { abreviatura: true } },
+          },
+        },
+      },
       orderBy: { timestamp: "desc" },
     }),
     prisma.productoNoCatalogado.findMany({
@@ -67,7 +73,7 @@ export async function GET(
       productoId: c.productoId,
       codigoBarras: c.producto.codigoBarras,
       descripcion: c.producto.descripcion,
-      unidadMedida: c.producto.unidadMedida,
+      unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: decimalToNumber(c.cantidadContada),
       timestamp: c.timestamp,
     })),

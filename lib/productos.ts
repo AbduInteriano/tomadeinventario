@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeNombre } from "@/lib/api-auth";
+import { productoInclude } from "@/lib/catalogo";
 
 export const EXCEL_HEADERS = [
   "Código Barras",
@@ -13,8 +14,8 @@ export interface ProductoInput {
   codigoBarras: string;
   codigoInterno?: string | null;
   descripcion: string;
-  unidadMedida: string;
-  categoria?: string | null;
+  unidadMedidaId: string;
+  categoriaId?: string | null;
 }
 
 export interface ProductoResponse {
@@ -23,33 +24,50 @@ export interface ProductoResponse {
   codigoInterno: string | null;
   descripcion: string;
   unidadMedida: string;
+  unidadMedidaId: string;
+  unidadMedidaNombre: string;
   categoria: string | null;
+  categoriaId: string | null;
 }
 
-export function serializeProducto(p: {
+type ProductoWithRelations = {
   id: string;
   codigoBarras: string;
   codigoInterno: string | null;
   descripcion: string;
-  unidadMedida: string;
-  categoria: string | null;
-}): ProductoResponse {
+  unidadMedida: { id: string; nombre: string; abreviatura: string };
+  categoria: { id: string; nombre: string } | null;
+};
+
+export function serializeProducto(p: ProductoWithRelations): ProductoResponse {
   return {
     id: p.id,
     codigoBarras: p.codigoBarras,
     codigoInterno: p.codigoInterno,
     descripcion: p.descripcion,
-    unidadMedida: p.unidadMedida,
-    categoria: p.categoria,
+    unidadMedida: p.unidadMedida.abreviatura,
+    unidadMedidaId: p.unidadMedida.id,
+    unidadMedidaNombre: p.unidadMedida.nombre,
+    categoria: p.categoria?.nombre ?? null,
+    categoriaId: p.categoria?.id ?? null,
   };
 }
+
+export const productoSelect = {
+  id: true,
+  codigoBarras: true,
+  codigoInterno: true,
+  descripcion: true,
+  activo: true,
+  ...productoInclude,
+} as const;
 
 export function normalizeCodigoBarras(value: string): string {
   return value.trim();
 }
 
 export function validateProductoInput(
-  input: Partial<ProductoInput>,
+  input: Partial<ProductoInput> & { unidadMedidaId?: string | null },
   isUpdate = false
 ): { data?: ProductoInput; error?: string } {
   const codigoBarras = normalizeCodigoBarras(input.codigoBarras ?? "");
@@ -68,21 +86,24 @@ export function validateProductoInput(
     return { error: "La descripción no puede superar 255 caracteres" };
   }
 
-  const unidadMedida = normalizeNombre(input.unidadMedida ?? "");
-  if (!unidadMedida && !isUpdate) {
+  const unidadMedidaId = input.unidadMedidaId?.trim() ?? "";
+  if (!unidadMedidaId && !isUpdate) {
+    return { error: "Selecciona una unidad de medida" };
+  }
+  if (!unidadMedidaId && isUpdate) {
     return { error: "La unidad de medida es obligatoria" };
   }
 
   const codigoInterno = input.codigoInterno?.trim() || null;
-  const categoria = input.categoria?.trim() || null;
+  const categoriaId = input.categoriaId?.trim() || null;
 
   return {
     data: {
       codigoBarras,
       codigoInterno,
       descripcion,
-      unidadMedida: unidadMedida || "UN",
-      categoria,
+      unidadMedidaId,
+      categoriaId,
     },
   };
 }
@@ -125,8 +146,8 @@ export function productoDataChanged(
     codigoBarras: string;
     codigoInterno: string | null;
     descripcion: string;
-    unidadMedida: string;
-    categoria: string | null;
+    unidadMedidaId: string;
+    categoriaId: string | null;
     activo: boolean;
   },
   data: ProductoInput
@@ -135,8 +156,8 @@ export function productoDataChanged(
     existing.codigoBarras.toLowerCase() !== data.codigoBarras.toLowerCase() ||
     (existing.codigoInterno ?? "") !== (data.codigoInterno ?? "") ||
     existing.descripcion !== data.descripcion ||
-    existing.unidadMedida !== data.unidadMedida ||
-    (existing.categoria ?? "") !== (data.categoria ?? "") ||
+    existing.unidadMedidaId !== data.unidadMedidaId ||
+    (existing.categoriaId ?? "") !== (data.categoriaId ?? "") ||
     !existing.activo
   );
 }
@@ -151,12 +172,35 @@ export async function previewImportRows(rows: unknown[][]) {
     const row = rows[i];
     const fila = i + 2;
 
+    const abreviatura = cellToString(row[3]) || "UN";
+    const categoriaNombre = cellToString(row[4]) || null;
+
+    const unidad = await prisma.unidadMedida.findFirst({
+      where: { abreviatura: { equals: abreviatura.toUpperCase(), mode: "insensitive" } },
+    });
+    if (!unidad) {
+      errores.push({ fila, motivo: `Unidad "${abreviatura}" no existe` });
+      continue;
+    }
+
+    let categoriaId: string | null = null;
+    if (categoriaNombre) {
+      const categoria = await prisma.categoria.findFirst({
+        where: { nombre: { equals: normalizeNombre(categoriaNombre), mode: "insensitive" } },
+      });
+      if (!categoria) {
+        errores.push({ fila, motivo: `Categoría "${categoriaNombre}" no existe` });
+        continue;
+      }
+      categoriaId = categoria.id;
+    }
+
     const validated = validateProductoInput({
       codigoBarras: cellToString(row[0]),
       codigoInterno: cellToString(row[1]) || null,
       descripcion: cellToString(row[2]),
-      unidadMedida: cellToString(row[3]) || "UN",
-      categoria: cellToString(row[4]) || null,
+      unidadMedidaId: unidad.id,
+      categoriaId,
     });
 
     if (validated.error || !validated.data) {

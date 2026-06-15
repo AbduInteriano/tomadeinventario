@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
           id: true,
           codigoBarras: true,
           descripcion: true,
-          unidadMedida: true,
+          unidadMedida: { select: { abreviatura: true } },
         },
       });
 
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
             select: {
               codigoBarras: true,
               descripcion: true,
-              unidadMedida: true,
+              unidadMedida: { select: { abreviatura: true } },
             },
           },
         },
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       productoId: conteo.productoId,
       codigoBarras: conteo.producto.codigoBarras,
       descripcion: conteo.producto.descripcion,
-      unidadMedida: conteo.producto.unidadMedida,
+      unidadMedida: conteo.producto.unidadMedida.abreviatura,
       cantidadContada: decimalToNumber(conteo.cantidadContada),
       timestamp: conteo.timestamp,
     });

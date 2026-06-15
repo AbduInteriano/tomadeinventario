@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
+import { resolveCategoriaId, resolveUnidadMedidaId } from "@/lib/catalogo";
 import {
   buildProductoSearchWhere,
   findProductoCodigoDuplicado,
+  productoSelect,
   serializeProducto,
   validateProductoInput,
 } from "@/lib/productos";
@@ -29,20 +31,13 @@ export async function GET(request: NextRequest) {
   if (groupBy && !q.trim()) {
     const productos = await prisma.producto.findMany({
       where,
-      orderBy: [{ categoria: "asc" }, { descripcion: "asc" }],
-      select: {
-        id: true,
-        codigoBarras: true,
-        codigoInterno: true,
-        descripcion: true,
-        unidadMedida: true,
-        categoria: true,
-      },
+      orderBy: [{ categoria: { nombre: "asc" } }, { descripcion: "asc" }],
+      select: productoSelect,
     });
 
     const gruposMap = new Map<string, ReturnType<typeof serializeProducto>[]>();
     for (const p of productos) {
-      const key = p.categoria?.trim() || "Sin categoría";
+      const key = p.categoria?.nombre ?? "Sin categoría";
       if (!gruposMap.has(key)) gruposMap.set(key, []);
       gruposMap.get(key)!.push(serializeProducto(p));
     }
@@ -63,14 +58,7 @@ export async function GET(request: NextRequest) {
       orderBy: { descripcion: "asc" },
       skip: (page - 1) * limit,
       take: limit,
-      select: {
-        id: true,
-        codigoBarras: true,
-        codigoInterno: true,
-        descripcion: true,
-        unidadMedida: true,
-        categoria: true,
-      },
+      select: productoSelect,
     }),
     prisma.producto.count({ where }),
   ]);
@@ -97,12 +85,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
+  const unidad = await resolveUnidadMedidaId(body.unidadMedidaId as string | undefined);
+  if (unidad.error || !unidad.id) {
+    return NextResponse.json({ error: unidad.error ?? "Unidad no válida" }, { status: 400 });
+  }
+
+  const categoria = await resolveCategoriaId(body.categoriaId as string | null | undefined);
+  if (categoria.error) {
+    return NextResponse.json({ error: categoria.error }, { status: 400 });
+  }
+
   const validated = validateProductoInput({
     codigoBarras: body.codigoBarras as string,
     codigoInterno: body.codigoInterno as string | null,
     descripcion: body.descripcion as string,
-    unidadMedida: body.unidadMedida as string,
-    categoria: body.categoria as string | null,
+    unidadMedidaId: unidad.id,
+    categoriaId: categoria.id,
   });
 
   if (validated.error || !validated.data) {
@@ -125,10 +123,11 @@ export async function POST(request: NextRequest) {
         codigoBarras: data.codigoBarras,
         codigoInterno: data.codigoInterno,
         descripcion: data.descripcion,
-        unidadMedida: data.unidadMedida,
-        categoria: data.categoria,
+        unidadMedidaId: data.unidadMedidaId,
+        categoriaId: data.categoriaId,
         activo: true,
       },
+      select: productoSelect,
     });
     return NextResponse.json(serializeProducto(updated), { status: 201 });
   }
@@ -141,7 +140,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const producto = await prisma.producto.create({ data });
+  const producto = await prisma.producto.create({
+    data: {
+      codigoBarras: data.codigoBarras,
+      codigoInterno: data.codigoInterno,
+      descripcion: data.descripcion,
+      unidadMedidaId: data.unidadMedidaId,
+      categoriaId: data.categoriaId,
+    },
+    select: productoSelect,
+  });
 
   return NextResponse.json(serializeProducto(producto), { status: 201 });
 }

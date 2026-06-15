@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ export function LoginForm() {
     setLoading(true);
 
     const result = await signIn("credentials", {
-      email: email.trim().toLowerCase(),
+      username: username.trim().toLowerCase(),
       password,
       redirect: false,
     });
@@ -25,7 +25,7 @@ export function LoginForm() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Email o contraseña incorrectos");
+      setError("Usuario o contraseña incorrectos");
       return;
     }
 
@@ -43,19 +43,18 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
-          Email
+        <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+          Usuario
         </label>
         <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
+          id="username"
+          type="text"
+          autoComplete="username"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           className="w-full rounded-xl border border-slate-300 px-4 py-3.5 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-          placeholder="usuario@empresa.com"
+          placeholder="nombre.usuario"
         />
       </div>
 

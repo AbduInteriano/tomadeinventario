@@ -4,15 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi, normalizeNombre } from "@/lib/api-auth";
 import {
   assertPuedeDesactivar,
-  findEmailDuplicado,
+  findUsernameDuplicado,
   generatePassword,
   hashPassword,
-  normalizeEmail,
+  normalizeUsername,
   serializeUsuario,
   usuarioTieneHistorial,
-  validateEmail,
   validateNombreUsuario,
   validatePassword,
+  validateUsername,
 } from "@/lib/usuarios";
 
 type RouteParams = { params: { id: string } };
@@ -28,7 +28,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   let body: {
     nombre?: string;
-    email?: string;
+    username?: string;
     role?: string;
     activo?: boolean;
     restablecerPassword?: boolean;
@@ -50,7 +50,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const updateData: {
     nombre?: string;
-    email?: string;
+    username?: string;
     role?: Role;
     activo?: boolean;
     password?: string;
@@ -64,17 +64,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     updateData.nombre = normalizeNombre(body.nombre);
   }
 
-  if (body.email !== undefined) {
-    const emailError = validateEmail(body.email);
-    if (emailError) {
-      return NextResponse.json({ error: emailError }, { status: 400 });
+  if (body.username !== undefined) {
+    const usernameError = validateUsername(body.username);
+    if (usernameError) {
+      return NextResponse.json({ error: usernameError }, { status: 400 });
     }
-    const email = normalizeEmail(body.email);
-    const duplicado = await findEmailDuplicado(email, params.id);
+    const username = normalizeUsername(body.username);
+    const duplicado = await findUsernameDuplicado(username, params.id);
     if (duplicado) {
-      return NextResponse.json({ error: "Ya existe un usuario con ese email" }, { status: 409 });
+      return NextResponse.json({ error: "Ya existe un usuario con ese nombre de usuario" }, { status: 409 });
     }
-    updateData.email = email;
+    updateData.username = username;
   }
 
   if (body.role !== undefined) {

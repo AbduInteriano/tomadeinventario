@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSupervisorApi } from "@/lib/api-auth";
+import { requireSupervisorApi, normalizeNombre } from "@/lib/api-auth";
 import { parseProductoExcel } from "@/lib/excel-productos";
 import {
   cellToString,
@@ -71,18 +71,35 @@ export async function POST(request: NextRequest) {
     const row = parsed.rows[i];
     const fila = i + 2;
 
-    const codigoBarras = cellToString(row[0]);
-    const codigoInterno = cellToString(row[1]) || null;
-    const descripcion = cellToString(row[2]);
-    const unidadMedida = cellToString(row[3]) || "UN";
-    const categoria = cellToString(row[4]) || null;
+    const abreviatura = cellToString(row[3]) || "UN";
+    const categoriaNombre = cellToString(row[4]) || null;
+
+    const unidad = await prisma.unidadMedida.findFirst({
+      where: { abreviatura: { equals: abreviatura.toUpperCase(), mode: "insensitive" } },
+    });
+    if (!unidad) {
+      errores.push({ fila, motivo: `Unidad "${abreviatura}" no existe` });
+      continue;
+    }
+
+    let categoriaId: string | null = null;
+    if (categoriaNombre) {
+      const categoria = await prisma.categoria.findFirst({
+        where: { nombre: { equals: normalizeNombre(categoriaNombre), mode: "insensitive" } },
+      });
+      if (!categoria) {
+        errores.push({ fila, motivo: `Categoría "${categoriaNombre}" no existe` });
+        continue;
+      }
+      categoriaId = categoria.id;
+    }
 
     const validated = validateProductoInput({
-      codigoBarras,
-      codigoInterno,
-      descripcion,
-      unidadMedida,
-      categoria,
+      codigoBarras: cellToString(row[0]),
+      codigoInterno: cellToString(row[1]) || null,
+      descripcion: cellToString(row[2]),
+      unidadMedidaId: unidad.id,
+      categoriaId,
     });
 
     if (validated.error || !validated.data) {
@@ -106,14 +123,22 @@ export async function POST(request: NextRequest) {
             codigoBarras: data.codigoBarras,
             codigoInterno: data.codigoInterno,
             descripcion: data.descripcion,
-            unidadMedida: data.unidadMedida,
-            categoria: data.categoria,
+            unidadMedidaId: data.unidadMedidaId,
+            categoriaId: data.categoriaId,
             activo: true,
           },
         });
         actualizados++;
       } else {
-        await prisma.producto.create({ data });
+        await prisma.producto.create({
+          data: {
+            codigoBarras: data.codigoBarras,
+            codigoInterno: data.codigoInterno,
+            descripcion: data.descripcion,
+            unidadMedidaId: data.unidadMedidaId,
+            categoriaId: data.categoriaId,
+          },
+        });
         creados++;
       }
     } catch {

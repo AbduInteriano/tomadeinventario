@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
+import { resolveCategoriaId, resolveUnidadMedidaId } from "@/lib/catalogo";
 import {
   findProductoCodigoDuplicado,
+  productoSelect,
   productoTieneConteos,
   serializeProducto,
   validateProductoInput,
@@ -16,6 +18,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const producto = await prisma.producto.findUnique({
     where: { id: params.id },
+    select: productoSelect,
   });
 
   if (!producto || !producto.activo) {
@@ -29,6 +32,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
+  const unidadMedidaId =
+    (body.unidadMedidaId as string | undefined) ?? producto.unidadMedida.id;
+  const categoriaId =
+    body.categoriaId !== undefined
+      ? (body.categoriaId as string | null)
+      : producto.categoria?.id ?? null;
+
+  const unidad = await resolveUnidadMedidaId(unidadMedidaId);
+  if (unidad.error || !unidad.id) {
+    return NextResponse.json({ error: unidad.error ?? "Unidad no válida" }, { status: 400 });
+  }
+
+  const categoria = await resolveCategoriaId(categoriaId ?? undefined);
+  if (categoria.error) {
+    return NextResponse.json({ error: categoria.error }, { status: 400 });
+  }
+
   const validated = validateProductoInput(
     {
       codigoBarras: (body.codigoBarras as string) ?? producto.codigoBarras,
@@ -37,11 +57,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           ? (body.codigoInterno as string | null)
           : producto.codigoInterno,
       descripcion: (body.descripcion as string) ?? producto.descripcion,
-      unidadMedida: (body.unidadMedida as string) ?? producto.unidadMedida,
-      categoria:
-        body.categoria !== undefined
-          ? (body.categoria as string | null)
-          : producto.categoria,
+      unidadMedidaId: unidad.id,
+      categoriaId: categoria.id,
     },
     true
   );
@@ -66,9 +83,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       codigoBarras: data.codigoBarras,
       codigoInterno: data.codigoInterno,
       descripcion: data.descripcion,
-      unidadMedida: data.unidadMedida,
-      categoria: data.categoria,
+      unidadMedidaId: data.unidadMedidaId,
+      categoriaId: data.categoriaId,
     },
+    select: productoSelect,
   });
 
   return NextResponse.json(serializeProducto(updated));

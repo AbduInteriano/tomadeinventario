@@ -22,7 +22,7 @@ enum AsignacionEstado {
 
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
+  username  String   @unique
   password  String
   nombre    String
   role      Role     @default(TOMADOR)
@@ -34,6 +34,29 @@ model User {
   tomasCreadas   AsignacionInventarioArea[] @relation("TomasCreadas")
   conteos        ConteoInventario[]
   noCatalogados  ProductoNoCatalogado[]
+
+  @@index([activo])
+}
+
+model Categoria {
+  id        String     @id @default(cuid())
+  nombre    String     @unique
+  activo    Boolean    @default(true)
+  productos Producto[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([activo])
+}
+
+model UnidadMedida {
+  id          String     @id @default(cuid())
+  nombre      String
+  abreviatura String     @unique
+  activo      Boolean    @default(true)
+  productos   Producto[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@index([activo])
 }
@@ -64,22 +87,25 @@ model Area {
 }
 
 model Producto {
-  id            String             @id @default(cuid())
-  codigoBarras  String             @unique
-  codigoInterno String?
-  descripcion   String
-  unidadMedida  String
-  categoria     String?
-  stockGlobal   Decimal            @default(0) @db.Decimal(12, 3)
-  activo        Boolean            @default(true)
-  conteos       ConteoInventario[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  codigoBarras    String             @unique
+  codigoInterno   String?
+  descripcion     String
+  unidadMedidaId  String
+  unidadMedida    UnidadMedida       @relation(fields: [unidadMedidaId], references: [id])
+  categoriaId     String?
+  categoria       Categoria?         @relation(fields: [categoriaId], references: [id])
+  stockGlobal     Decimal            @default(0) @db.Decimal(12, 3)
+  activo          Boolean            @default(true)
+  conteos         ConteoInventario[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([codigoBarras])
   @@index([codigoInterno])
   @@index([activo])
-  @@index([categoria])
+  @@index([categoriaId])
+  @@index([unidadMedidaId])
 }
 
 model AsignacionInventarioArea {

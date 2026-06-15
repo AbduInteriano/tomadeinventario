@@ -36,6 +36,12 @@ export default async function SupervisorDashboardPage() {
       ready: true,
     },
     {
+      href: "/supervisor/catalogo",
+      title: "Categorías y unidades",
+      description: "Administrar categorías y unidades de medida",
+      ready: true,
+    },
+    {
       href: "/supervisor/usuarios",
       title: "Usuarios",
       description: "Tomadores y supervisores",

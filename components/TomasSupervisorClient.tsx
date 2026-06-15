@@ -43,6 +43,57 @@ export function TomasSupervisorClient() {
   const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [includeArchivadas, setIncludeArchivadas] = useState(false);
   const [archivandoId, setArchivandoId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [exportando, setExportando] = useState(false);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function descargarSeleccionados() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    setExportando(true);
+    setFlash(null);
+    try {
+      const res = await fetch("/api/conteos/exportar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "No se pudo generar el Excel");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `conteos-${fecha}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setFlash({
+        type: "success",
+        message: `Excel descargado (${ids.length} toma${ids.length === 1 ? "" : "s"})`,
+      });
+    } catch (err) {
+      setFlash({
+        type: "error",
+        message: err instanceof Error ? err.message : "Error al descargar Excel",
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
 
   const refresh = useCallback(async (fechaQuery?: string, archivadas?: boolean) => {
     setLoading(true);
@@ -57,6 +108,7 @@ export function TomasSupervisorClient() {
       setFecha(data.fecha);
       setFechas(data.fechas ?? []);
       setTomas(data.tomas ?? []);
+      setSelectedIds(new Set());
       setPuntos(data.puntos ?? []);
       setUsuarios(data.usuarios ?? []);
     }
@@ -275,6 +327,16 @@ export function TomasSupervisorClient() {
           />
           Incluir archivadas
         </label>
+        {selectedIds.size > 0 && (
+          <button
+            type="button"
+            onClick={descargarSeleccionados}
+            disabled={exportando}
+            className="rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {exportando ? "Generando…" : `Excel (${selectedIds.size})`}
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -316,49 +378,101 @@ export function TomasSupervisorClient() {
           )}
           {finalizadas.length > 0 && (
             <section>
-              <h3 className="mb-2 text-sm font-semibold uppercase text-green-700">
-                Finalizadas ({finalizadas.length})
-              </h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold uppercase text-green-700">
+                  Finalizadas ({finalizadas.length})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = finalizadas.map((t) => t.id);
+                    if (selectedIds.size === ids.length) setSelectedIds(new Set());
+                    else setSelectedIds(new Set(ids));
+                  }}
+                  className="text-xs font-medium text-blue-600"
+                >
+                  {selectedIds.size === finalizadas.length ? "Quitar selección" : "Seleccionar todas"}
+                </button>
+              </div>
               <ul className="space-y-2">
                 {finalizadas.map((t) => (
                   <li key={t.id} className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm text-slate-500">{t.area.punto}</p>
-                        <p className="font-bold text-slate-900">{t.area.nombre}</p>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {t.usuarioNombre} · {t.conteosCount} conteos
-                        </p>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(t.id)}
+                        onChange={() => toggleSelected(t.id)}
+                        className="mt-1 h-4 w-4 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm text-slate-500">{t.area.punto}</p>
+                            <p className="font-bold text-slate-900">{t.area.nombre}</p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {t.usuarioNombre} · {t.conteosCount} conteos
+                            </p>
+                          </div>
+                          <EstadoBadge estado={t.estado} />
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <Link
+                            href={`/tomador/area/${t.id}`}
+                            className="text-sm font-medium text-blue-600"
+                          >
+                            Ver conteos →
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setExportando(true);
+                              try {
+                                const res = await fetch("/api/conteos/exportar", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ ids: [t.id] }),
+                                });
+                                if (!res.ok) {
+                                  const err = await res.json().catch(() => ({}));
+                                  throw new Error(err.error ?? "Error al exportar");
+                                }
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `conteo-${t.id}.xlsx`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              } catch (err) {
+                                setFlash({
+                                  type: "error",
+                                  message:
+                                    err instanceof Error ? err.message : "Error al descargar",
+                                });
+                              } finally {
+                                setExportando(false);
+                              }
+                            }}
+                            className="text-sm font-medium text-green-700"
+                          >
+                            Descargar Excel
+                          </button>
+                          {!t.archivada ? (
+                            <button
+                              type="button"
+                              onClick={() => archivarToma(t.id)}
+                              disabled={archivandoId === t.id}
+                              className="text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                            >
+                              {archivandoId === t.id ? "Archivando…" : "Archivar"}
+                            </button>
+                          ) : (
+                            <span className="text-xs font-medium uppercase text-slate-400">
+                              Archivada
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <EstadoBadge estado={t.estado} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <Link
-                        href={`/tomador/area/${t.id}`}
-                        className="text-sm font-medium text-blue-600"
-                      >
-                        Ver conteos →
-                      </Link>
-                      <a
-                        href={`/api/asignaciones/${t.id}/exportar`}
-                        className="text-sm font-medium text-green-700"
-                      >
-                        Descargar Excel
-                      </a>
-                      {!t.archivada ? (
-                        <button
-                          type="button"
-                          onClick={() => archivarToma(t.id)}
-                          disabled={archivandoId === t.id}
-                          className="text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
-                        >
-                          {archivandoId === t.id ? "Archivando…" : "Archivar"}
-                        </button>
-                      ) : (
-                        <span className="text-xs font-medium uppercase text-slate-400">
-                          Archivada
-                        </span>
-                      )}
                     </div>
                   </li>
                 ))}

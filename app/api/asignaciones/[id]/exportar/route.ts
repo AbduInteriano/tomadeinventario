@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
 import { canViewAsignacion } from "@/lib/tomas";
-import { createConteoExportBuffer } from "@/lib/excel-conteo";
+import {
+  buildConteoBlockLabel,
+  createConteoExportBuffer,
+} from "@/lib/excel-conteo";
 import { fechaToIsoDate } from "@/lib/inventario";
 
 type RouteParams = { params: { id: string } };
@@ -26,10 +29,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       area: { include: { punto: true } },
       usuario: { select: { nombre: true } },
       conteos: {
-        include: { producto: true },
+        include: {
+          producto: {
+            include: {
+              unidadMedida: { select: { abreviatura: true } },
+            },
+          },
+        },
         orderBy: { producto: { descripcion: "asc" } },
       },
-      noCatalogados: { orderBy: { timestamp: "asc" } },
     },
   });
 
@@ -44,21 +52,19 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     .slice(0, 60);
 
   const buffer = await createConteoExportBuffer({
-    meta: {
+    label: buildConteoBlockLabel({
       punto: asignacion.area.punto.nombre,
       area: asignacion.area.nombre,
       usuario: asignacion.usuario.nombre,
       fecha: fechaStr,
-      estado: asignacion.estado,
-    },
+    }),
     conteos: asignacion.conteos.map((c) => ({
       codigoBarras: c.producto.codigoBarras,
       codigoInterno: c.producto.codigoInterno,
       descripcion: c.producto.descripcion,
-      unidadMedida: c.producto.unidadMedida,
+      unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
     })),
-    noCatalogados: asignacion.noCatalogados,
   });
 
   return new NextResponse(new Uint8Array(buffer), {

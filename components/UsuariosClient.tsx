@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 export interface UsuarioItem {
   id: string;
   nombre: string;
-  email: string;
+  username: string;
   role: "SUPERVISOR" | "TOMADOR";
   activo: boolean;
 }
@@ -46,7 +46,7 @@ function ActivoBadge({ activo }: { activo: boolean }) {
 
 const emptyCreate = {
   nombre: "",
-  email: "",
+  username: "",
   password: "",
   role: "TOMADOR" as "SUPERVISOR" | "TOMADOR",
 };
@@ -63,7 +63,7 @@ export function UsuariosClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     nombre: "",
-    email: "",
+    username: "",
     role: "TOMADOR" as "SUPERVISOR" | "TOMADOR",
     restablecerPassword: false,
     nuevaPassword: "",
@@ -105,7 +105,7 @@ export function UsuariosClient({
     setEditingId(u.id);
     setEditForm({
       nombre: u.nombre,
-      email: u.email,
+      username: u.username,
       role: u.role,
       restablecerPassword: false,
       nuevaPassword: "",
@@ -118,7 +118,7 @@ export function UsuariosClient({
 
     const payload: Record<string, unknown> = {
       nombre: editForm.nombre,
-      email: editForm.email,
+      username: editForm.username,
       role: editForm.role,
     };
 
@@ -150,7 +150,7 @@ export function UsuariosClient({
             ? {
                 id: data.id,
                 nombre: data.nombre,
-                email: data.email,
+                username: data.username,
                 role: data.role,
                 activo: data.activo,
               }
@@ -238,11 +238,11 @@ export function UsuariosClient({
               placeholder="Nombre completo"
             />
             <input
-              type="email"
-              value={editForm.email}
-              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              type="text"
+              value={editForm.username}
+              onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
-              placeholder="Email"
+              placeholder="Nombre de usuario"
             />
             <select
               value={editForm.role}
@@ -310,7 +310,7 @@ export function UsuariosClient({
                 <span className="ml-1.5 text-xs font-normal text-slate-400">(tú)</span>
               )}
             </p>
-            <p className="truncate text-sm text-slate-500">{u.email}</p>
+            <p className="truncate text-sm text-slate-500">{u.username}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <RoleBadge role={u.role} />
@@ -382,11 +382,12 @@ export function UsuariosClient({
             />
             <input
               required
-              type="email"
-              value={createForm.email}
-              onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+              type="text"
+              autoComplete="username"
+              value={createForm.username}
+              onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
-              placeholder="Email"
+              placeholder="Nombre de usuario"
             />
             <input
               required

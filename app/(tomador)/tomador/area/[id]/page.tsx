@@ -53,7 +53,7 @@ export default async function ConteoAreaPage({
           select: {
             codigoBarras: true,
             descripcion: true,
-            unidadMedida: true,
+            unidadMedida: { select: { abreviatura: true } },
           },
         },
       },
@@ -103,7 +103,7 @@ export default async function ConteoAreaPage({
           id: c.id,
           codigoBarras: c.producto.codigoBarras,
           descripcion: c.producto.descripcion,
-          unidadMedida: c.producto.unidadMedida,
+          unidadMedida: c.producto.unidadMedida.abreviatura,
           cantidadContada: decimalToNumber(c.cantidadContada),
         }))}
         noCatalogadosIniciales={noCatalogados.map((n) => ({

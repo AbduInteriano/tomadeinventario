@@ -2,16 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-const PRODUCTO_SELECT = {
-  id: true,
-  codigoBarras: true,
-  codigoInterno: true,
-  descripcion: true,
-  unidadMedida: true,
-  categoria: true,
-  activo: true,
-} as const;
+import { productoSelect, serializeProducto } from "@/lib/productos";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -26,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const byBarras = await prisma.producto.findUnique({
     where: { codigoBarras: codigo },
-    select: PRODUCTO_SELECT,
+    select: productoSelect,
   });
 
   const producto =
@@ -34,22 +25,24 @@ export async function GET(request: NextRequest) {
       ? byBarras
       : await prisma.producto.findFirst({
           where: { codigoInterno: codigo, activo: true },
-          select: PRODUCTO_SELECT,
+          select: productoSelect,
         });
 
   if (!producto) {
     return NextResponse.json({ encontrado: false });
   }
 
+  const serialized = serializeProducto(producto);
+
   return NextResponse.json({
     encontrado: true,
     producto: {
-      id: producto.id,
-      codigoBarras: producto.codigoBarras,
-      codigoInterno: producto.codigoInterno,
-      descripcion: producto.descripcion,
-      unidadMedida: producto.unidadMedida,
-      categoria: producto.categoria,
+      id: serialized.id,
+      codigoBarras: serialized.codigoBarras,
+      codigoInterno: serialized.codigoInterno,
+      descripcion: serialized.descripcion,
+      unidadMedida: serialized.unidadMedida,
+      categoria: serialized.categoria,
     },
   });
 }

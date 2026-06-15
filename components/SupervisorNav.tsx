@@ -6,6 +6,7 @@ const links = [
   { href: "/tomador", label: "Conteo" },
   { href: "/supervisor/puntos", label: "Puntos" },
   { href: "/supervisor/productos", label: "Productos" },
+  { href: "/supervisor/catalogo", label: "Catálogo" },
   { href: "/supervisor/usuarios", label: "Usuarios" },
 ];
 

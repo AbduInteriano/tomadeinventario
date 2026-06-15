@@ -14,15 +14,17 @@ export function generatePassword(length = 10): string {
   return result;
 }
 
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+export function normalizeUsername(username: string): string {
+  return username.trim().toLowerCase();
 }
 
-export function validateEmail(email: string): string | null {
-  const normalized = normalizeEmail(email);
-  if (!normalized) return "El email es obligatorio";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-    return "Email inválido";
+export function validateUsername(username: string): string | null {
+  const normalized = normalizeUsername(username);
+  if (!normalized) return "El usuario es obligatorio";
+  if (normalized.length < 3) return "El usuario debe tener al menos 3 caracteres";
+  if (normalized.length > 64) return "El usuario no puede superar 64 caracteres";
+  if (!/^[a-z0-9._-]+$/.test(normalized)) {
+    return "Solo letras, números, puntos, guiones y guión bajo";
   }
   return null;
 }
@@ -48,10 +50,10 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
-export async function findEmailDuplicado(email: string, excludeId?: string) {
+export async function findUsernameDuplicado(username: string, excludeId?: string) {
   return prisma.user.findFirst({
     where: {
-      email: { equals: normalizeEmail(email), mode: "insensitive" },
+      username: { equals: normalizeUsername(username), mode: "insensitive" },
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
   });
@@ -104,7 +106,7 @@ export async function assertPuedeDesactivar(
 export function serializeUsuario(u: {
   id: string;
   nombre: string;
-  email: string;
+  username: string;
   role: Role;
   activo: boolean;
   createdAt: Date;
@@ -112,7 +114,7 @@ export function serializeUsuario(u: {
   return {
     id: u.id,
     nombre: u.nombre,
-    email: u.email,
+    username: u.username,
     role: u.role,
     activo: u.activo,
     createdAt: u.createdAt.toISOString(),

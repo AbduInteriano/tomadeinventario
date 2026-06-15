@@ -3,13 +3,13 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi, normalizeNombre } from "@/lib/api-auth";
 import {
-  findEmailDuplicado,
+  findUsernameDuplicado,
   hashPassword,
-  normalizeEmail,
+  normalizeUsername,
   serializeUsuario,
-  validateEmail,
   validateNombreUsuario,
   validatePassword,
+  validateUsername,
 } from "@/lib/usuarios";
 
 export async function GET() {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   let body: {
     nombre?: string;
-    email?: string;
+    username?: string;
     password?: string;
     role?: string;
   };
@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: nombreError }, { status: 400 });
   }
 
-  const emailError = validateEmail(body.email ?? "");
-  if (emailError) {
-    return NextResponse.json({ error: emailError }, { status: 400 });
+  const usernameError = validateUsername(body.username ?? "");
+  if (usernameError) {
+    return NextResponse.json({ error: usernameError }, { status: 400 });
   }
 
   const passwordError = validatePassword(body.password ?? "");
@@ -56,12 +56,12 @@ export async function POST(request: NextRequest) {
   }
 
   const role = body.role === Role.SUPERVISOR ? Role.SUPERVISOR : Role.TOMADOR;
-  const email = normalizeEmail(body.email!);
+  const username = normalizeUsername(body.username!);
   const nombre = normalizeNombre(body.nombre!);
 
-  const duplicado = await findEmailDuplicado(email);
+  const duplicado = await findUsernameDuplicado(username);
   if (duplicado) {
-    return NextResponse.json({ error: "Ya existe un usuario con ese email" }, { status: 409 });
+    return NextResponse.json({ error: "Ya existe un usuario con ese nombre de usuario" }, { status: 409 });
   }
 
   const passwordHash = await hashPassword(body.password!);
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   const usuario = await prisma.user.create({
     data: {
       nombre,
-      email,
+      username,
       password: passwordHash,
       role,
     },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import { createProductosExportBuffer } from "@/lib/excel-productos";
+import { productoSelect } from "@/lib/productos";
 
 export async function GET() {
   const auth = await requireSupervisorApi();
@@ -10,16 +11,18 @@ export async function GET() {
   const productos = await prisma.producto.findMany({
     where: { activo: true },
     orderBy: { descripcion: "asc" },
-    select: {
-      codigoBarras: true,
-      codigoInterno: true,
-      descripcion: true,
-      unidadMedida: true,
-      categoria: true,
-    },
+    select: productoSelect,
   });
 
-  const buffer = await createProductosExportBuffer(productos);
+  const buffer = await createProductosExportBuffer(
+    productos.map((p) => ({
+      codigoBarras: p.codigoBarras,
+      codigoInterno: p.codigoInterno,
+      descripcion: p.descripcion,
+      unidadMedida: p.unidadMedida.abreviatura,
+      categoria: p.categoria?.nombre ?? null,
+    }))
+  );
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
