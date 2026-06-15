@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { assertAsignacionAccess, decimalToNumber } from "@/lib/inventario";
+import { decimalToNumber } from "@/lib/inventario";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
+import { canViewAsignacion } from "@/lib/tomas";
 
 export async function GET(
   _request: NextRequest,
@@ -11,12 +12,31 @@ export async function GET(
   if ("error" in auth) return auth.error;
   const session = auth.session;
 
-  const access = await assertAsignacionAccess(params.id, session.user.id);
+  const access = await canViewAsignacion(params.id, session.user.id, session.user.role);
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
-  const { asignacion } = access;
+  const asignacion = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: params.id },
+    select: {
+      id: true,
+      estado: true,
+      usuarioId: true,
+      area: {
+        select: {
+          id: true,
+          nombre: true,
+          punto: { select: { nombre: true } },
+        },
+      },
+      fecha: true,
+    },
+  });
+
+  if (!asignacion) {
+    return NextResponse.json({ error: "Toma no encontrada" }, { status: 404 });
+  }
 
   const [conteos, noCatalogados] = await Promise.all([
     prisma.conteoInventario.findMany({
@@ -34,12 +54,13 @@ export async function GET(
     asignacion: {
       id: asignacion.id,
       estado: asignacion.estado,
+      esPropia: asignacion.usuarioId === session.user.id,
+      fecha: asignacion.fecha.toISOString().slice(0, 10),
       area: {
         id: asignacion.area.id,
         nombre: asignacion.area.nombre,
         punto: asignacion.area.punto.nombre,
       },
-      inventarioEstado: asignacion.inventario.estado,
     },
     conteos: conteos.map((c) => ({
       id: c.id,

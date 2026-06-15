@@ -69,10 +69,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       unidadMedida: data.unidadMedida,
       categoria: data.categoria,
     },
-    include: { _count: { select: { conteos: true } } },
   });
 
-  return NextResponse.json(serializeProducto(updated, updated._count.conteos));
+  return NextResponse.json(serializeProducto(updated));
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {

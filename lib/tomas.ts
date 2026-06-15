@@ -1,74 +1,137 @@
-import { AsignacionEstado, InventarioEstado } from "@prisma/client";
+import { AsignacionEstado, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ESTADOS_TOMA_ABIERTA, findTomaActivaEnArea } from "@/lib/inventario";
+import {
+  ESTADOS_TOMA_ABIERTA,
+  findTomaActivaEnArea,
+  hoyUtc,
+  parseFechaParam,
+  fechaToIsoDate,
+} from "@/lib/inventario";
 
-export async function crearToma(params: {
-  inventarioId: string;
-  areaId: string;
-  usuarioId: string | null;
-  estado?: AsignacionEstado;
-}) {
-  const inventario = await prisma.inventario.findUnique({
-    where: { id: params.inventarioId },
-  });
-
-  if (!inventario || inventario.estado === InventarioEstado.CERRADO) {
-    return { error: "El ciclo de inventario no está disponible" };
-  }
-
-  const area = await prisma.area.findFirst({
-    where: { id: params.areaId, activo: true, punto: { activo: true } },
-  });
-
-  if (!area) {
-    return { error: "Área no encontrada o inactiva" };
-  }
-
-  const existente = await findTomaActivaEnArea(params.inventarioId, params.areaId);
-  if (existente) {
-    return {
-      error: "Ya existe una toma activa para esta área en este ciclo",
-      asignacionId: existente.id,
-    };
-  }
-
-  if (params.usuarioId) {
-    const usuario = await prisma.user.findFirst({
-      where: { id: params.usuarioId, activo: true },
-    });
-    if (!usuario) {
-      return { error: "Usuario no válido o inactivo" };
-    }
-  }
-
-  const toma = await prisma.asignacionInventarioArea.create({
-    data: {
-      inventarioId: params.inventarioId,
-      areaId: params.areaId,
-      usuarioId: params.usuarioId,
-      estado: params.estado ?? AsignacionEstado.PENDIENTE,
+const tomaSelectFields = {
+  id: true,
+  estado: true,
+  fecha: true,
+  usuarioId: true,
+  creadoPorId: true,
+  usuario: { select: { id: true, nombre: true } },
+  area: {
+    select: {
+      id: true,
+      nombre: true,
+      punto: { select: { id: true, nombre: true } },
     },
-    include: {
-      area: { include: { punto: true } },
-      usuario: { select: { id: true, nombre: true } },
-    },
-  });
+  },
+  _count: { select: { conteos: true } },
+} as const;
 
-  return { toma };
-}
-
-export async function iniciarToma(asignacionId: string, userId: string, isSupervisor: boolean) {
+export async function canViewAsignacion(
+  asignacionId: string,
+  userId: string,
+  role: Role
+) {
   const asignacion = await prisma.asignacionInventarioArea.findUnique({
     where: { id: asignacionId },
-    include: { inventario: true },
+    select: {
+      id: true,
+      estado: true,
+      usuarioId: true,
+    },
   });
 
   if (!asignacion) {
     return { error: "Toma no encontrada", status: 404 as const };
   }
 
-  if (asignacion.inventario.estado === InventarioEstado.CERRADO) {
-    return { error: "El ciclo de inventario está cerrado", status: 403 as const };
+  if (role === Role.SUPERVISOR) {
+    return { asignacion, canWrite: asignacion.usuarioId === userId };
+  }
+
+  if (asignacion.usuarioId !== userId) {
+    return { error: "Esta toma pertenece a otro usuario", status: 403 as const };
+  }
+
+  return { asignacion, canWrite: true };
+}
+
+export async function crearTomas(params: {
+  usuarioId: string;
+  areaIds: string[];
+  creadoPorId: string;
+  fecha?: Date;
+}) {
+  const fecha = params.fecha ?? hoyUtc();
+
+  if (params.areaIds.length === 0) {
+    return { error: "Selecciona al menos un área" };
+  }
+
+  const usuario = await prisma.user.findFirst({
+    where: { id: params.usuarioId, activo: true },
+  });
+  if (!usuario) {
+    return { error: "Usuario no válido o inactivo" };
+  }
+
+  const areas = await prisma.area.findMany({
+    where: {
+      id: { in: params.areaIds },
+      activo: true,
+      punto: { activo: true },
+    },
+    include: { punto: { select: { nombre: true } } },
+  });
+
+  if (areas.length !== params.areaIds.length) {
+    return { error: "Una o más áreas no son válidas o están inactivas" };
+  }
+
+  const warnings: string[] = [];
+  const creadas: string[] = [];
+  const omitidas: string[] = [];
+
+  for (const area of areas) {
+    const activa = await findTomaActivaEnArea(area.id);
+    if (activa) {
+      omitidas.push(`${area.punto.nombre} · ${area.nombre}`);
+      continue;
+    }
+
+    const toma = await prisma.asignacionInventarioArea.create({
+      data: {
+        areaId: area.id,
+        usuarioId: params.usuarioId,
+        creadoPorId: params.creadoPorId,
+        fecha,
+        estado: AsignacionEstado.PENDIENTE,
+      },
+    });
+    creadas.push(toma.id);
+  }
+
+  if (creadas.length === 0) {
+    return {
+      error: "Ninguna área disponible. Ya tienen una toma activa.",
+      omitidas,
+    };
+  }
+
+  if (omitidas.length > 0) {
+    warnings.push(
+      `${omitidas.length} área(s) omitida(s) por tener toma activa: ${omitidas.join(", ")}`
+    );
+  }
+
+  return { creadas, warnings, fecha: fechaToIsoDate(fecha) };
+}
+
+export async function iniciarToma(asignacionId: string, userId: string, isSupervisor: boolean) {
+  const asignacion = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: asignacionId },
+  });
+
+  if (!asignacion) {
+    return { error: "Toma no encontrada", status: 404 as const };
   }
 
   if (asignacion.estado === AsignacionEstado.COMPLETADA) {
@@ -82,33 +145,17 @@ export async function iniciarToma(asignacionId: string, userId: string, isSuperv
     return { error: "La toma ya está en progreso", status: 400 as const };
   }
 
-  if (asignacion.usuarioId && asignacion.usuarioId !== userId) {
+  if (asignacion.usuarioId !== userId && !isSupervisor) {
     return { error: "Esta toma está asignada a otro usuario", status: 403 as const };
   }
 
-  if (!asignacion.usuarioId) {
-    if (!isSupervisor) {
-      return { error: "Esta toma no tiene usuario asignado", status: 403 as const };
-    }
+  if (isSupervisor && asignacion.usuarioId !== userId) {
+    return { error: "Solo el tomador asignado puede iniciar esta toma", status: 403 as const };
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.asignacionInventarioArea.update({
-      where: { id: asignacionId },
-      data: {
-        estado: AsignacionEstado.EN_PROGRESO,
-        usuarioId: asignacion.usuarioId ?? userId,
-      },
-    });
-
-    if (asignacion.inventario.estado === InventarioEstado.ABIERTO) {
-      await tx.inventario.update({
-        where: { id: asignacion.inventarioId },
-        data: { estado: InventarioEstado.EN_PROCESO },
-      });
-    }
-
-    return result;
+  const updated = await prisma.asignacionInventarioArea.update({
+    where: { id: asignacionId },
+    data: { estado: AsignacionEstado.EN_PROGRESO },
   });
 
   return { toma: updated };
@@ -117,7 +164,6 @@ export async function iniciarToma(asignacionId: string, userId: string, isSuperv
 export async function pausarToma(asignacionId: string, userId: string) {
   const asignacion = await prisma.asignacionInventarioArea.findUnique({
     where: { id: asignacionId },
-    include: { inventario: true },
   });
 
   if (!asignacion) {
@@ -143,7 +189,6 @@ export async function pausarToma(asignacionId: string, userId: string) {
 export async function finalizarToma(asignacionId: string, userId: string) {
   const asignacion = await prisma.asignacionInventarioArea.findUnique({
     where: { id: asignacionId },
-    include: { inventario: true },
   });
 
   if (!asignacion) {
@@ -156,9 +201,10 @@ export async function finalizarToma(asignacionId: string, userId: string) {
 
   if (
     asignacion.estado !== AsignacionEstado.EN_PROGRESO &&
-    asignacion.estado !== AsignacionEstado.PAUSADA
+    asignacion.estado !== AsignacionEstado.PAUSADA &&
+    asignacion.estado !== AsignacionEstado.PENDIENTE
   ) {
-    return { error: "La toma debe estar en progreso o pausada para finalizar", status: 400 as const };
+    return { error: "Esta toma ya fue finalizada", status: 400 as const };
   }
 
   const updated = await prisma.asignacionInventarioArea.update({
@@ -169,76 +215,111 @@ export async function finalizarToma(asignacionId: string, userId: string) {
   return { toma: updated };
 }
 
-export async function listTomadorTomorias(userId: string) {
+function buildFechaFilter(fecha?: Date) {
+  if (!fecha) return {};
+  return { fecha };
+}
+
+export async function listTomadorTomorias(userId: string, fecha?: Date) {
   return prisma.asignacionInventarioArea.findMany({
     where: {
       usuarioId: userId,
-      estado: { in: ESTADOS_TOMA_ABIERTA },
-      inventario: {
-        estado: { in: [InventarioEstado.ABIERTO, InventarioEstado.EN_PROCESO] },
-      },
+      ...buildFechaFilter(fecha),
     },
-    select: {
-      id: true,
-      estado: true,
-      inventarioId: true,
-      area: {
-        select: {
-          id: true,
-          nombre: true,
-          punto: { select: { nombre: true } },
-        },
-      },
-      _count: { select: { conteos: true } },
-    },
+    select: tomaSelectFields,
     orderBy: [{ estado: "asc" }, { updatedAt: "desc" }],
   });
 }
 
-export async function listAreasDisponiblesParaSupervisor(inventarioId: string) {
-  const [areas, tomoriasActivas] = await Promise.all([
-    prisma.area.findMany({
-      where: { activo: true, punto: { activo: true } },
-      select: {
-        id: true,
-        nombre: true,
-        punto: { select: { nombre: true } },
-      },
-      orderBy: [{ punto: { nombre: "asc" } }, { nombre: "asc" }],
-    }),
-    prisma.asignacionInventarioArea.findMany({
-      where: {
-        inventarioId,
-        estado: { in: ESTADOS_TOMA_ABIERTA },
-      },
-      select: { areaId: true },
-    }),
-  ]);
-
-  const ocupadas = new Set(tomoriasActivas.map((t) => t.areaId));
-
-  return areas.map((a) => ({
-    id: a.id,
-    nombre: a.nombre,
-    punto: a.punto.nombre,
-    tieneTomaActiva: ocupadas.has(a.id),
-  }));
+export async function listSupervisorTomorias(fecha?: Date) {
+  return prisma.asignacionInventarioArea.findMany({
+    where: buildFechaFilter(fecha),
+    select: tomaSelectFields,
+    orderBy: [{ fecha: "desc" }, { updatedAt: "desc" }],
+  });
 }
 
-export async function getOrCreateInventarioDefault(supervisorId: string) {
-  let inv = await prisma.inventario.findFirst({
-    where: { estado: { in: [InventarioEstado.ABIERTO, InventarioEstado.EN_PROCESO] } },
-    orderBy: { createdAt: "desc" },
+export async function listFechasConTomas() {
+  const rows = await prisma.asignacionInventarioArea.findMany({
+    select: { fecha: true },
+    distinct: ["fecha"],
+    orderBy: { fecha: "desc" },
+    take: 60,
+  });
+  return rows.map((r) => fechaToIsoDate(r.fecha));
+}
+
+export function serializeTomaConteo(
+  toma: {
+    id: string;
+    estado: AsignacionEstado;
+    fecha: Date;
+    usuarioId: string;
+    usuario: { id: string; nombre: string };
+    area: {
+      id: string;
+      nombre: string;
+      punto: { id: string; nombre: string };
+    };
+    _count: { conteos: number };
+  },
+  viewerUserId: string
+) {
+  return {
+    id: toma.id,
+    estado: toma.estado,
+    fecha: fechaToIsoDate(toma.fecha),
+    usuarioId: toma.usuarioId,
+    usuarioNombre: toma.usuario.nombre,
+    esPropia: toma.usuarioId === viewerUserId,
+    area: {
+      id: toma.area.id,
+      nombre: toma.area.nombre,
+      punto: toma.area.punto.nombre,
+      puntoId: toma.area.punto.id,
+    },
+    conteosCount: toma._count.conteos,
+  };
+}
+
+export async function getAreasParaAsignar() {
+  const areas = await prisma.area.findMany({
+    where: { activo: true, punto: { activo: true } },
+    select: {
+      id: true,
+      nombre: true,
+      punto: { select: { id: true, nombre: true } },
+    },
+    orderBy: [{ punto: { nombre: "asc" } }, { nombre: "asc" }],
   });
 
-  if (!inv) {
-    inv = await prisma.inventario.create({
-      data: {
-        estado: InventarioEstado.ABIERTO,
-        creadoPorId: supervisorId,
-      },
+  const activas = await prisma.asignacionInventarioArea.findMany({
+    where: { estado: { in: ESTADOS_TOMA_ABIERTA } },
+    select: { areaId: true },
+  });
+  const ocupadas = new Set(activas.map((t) => t.areaId));
+
+  const puntosMap = new Map<
+    string,
+    { id: string; nombre: string; areas: { id: string; nombre: string; disponible: boolean }[] }
+  >();
+
+  for (const a of areas) {
+    if (!puntosMap.has(a.punto.id)) {
+      puntosMap.set(a.punto.id, {
+        id: a.punto.id,
+        nombre: a.punto.nombre,
+        areas: [],
+      });
+    }
+    puntosMap.get(a.punto.id)!.areas.push({
+      id: a.id,
+      nombre: a.nombre,
+      disponible: !ocupadas.has(a.id),
     });
   }
 
-  return inv;
+  return Array.from(puntosMap.values());
 }
+
+export { parseFechaParam, hoyUtc, fechaToIsoDate };

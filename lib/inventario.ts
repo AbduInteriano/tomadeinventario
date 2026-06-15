@@ -1,4 +1,4 @@
-import { AsignacionEstado, InventarioEstado } from "@prisma/client";
+import { AsignacionEstado } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export const ESTADOS_TOMA_ABIERTA: AsignacionEstado[] = [
@@ -7,24 +7,9 @@ export const ESTADOS_TOMA_ABIERTA: AsignacionEstado[] = [
   AsignacionEstado.PAUSADA,
 ];
 
-export async function getInventarioActivo() {
-  return prisma.inventario.findFirst({
-    where: { estado: { in: [InventarioEstado.ABIERTO, InventarioEstado.EN_PROCESO] } },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-export async function getInventariosAbiertos() {
-  return prisma.inventario.findMany({
-    where: { estado: { in: [InventarioEstado.ABIERTO, InventarioEstado.EN_PROCESO] } },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-export async function findTomaActivaEnArea(inventarioId: string, areaId: string) {
+export async function findTomaActivaEnArea(areaId: string) {
   return prisma.asignacionInventarioArea.findFirst({
     where: {
-      inventarioId,
       areaId,
       estado: { in: ESTADOS_TOMA_ABIERTA },
     },
@@ -42,8 +27,6 @@ export async function assertAsignacionAccess(
       id: true,
       estado: true,
       usuarioId: true,
-      inventarioId: true,
-      inventario: { select: { estado: true } },
       area: {
         select: {
           id: true,
@@ -58,16 +41,8 @@ export async function assertAsignacionAccess(
     return { error: "Toma no encontrada", status: 404 as const };
   }
 
-  if (asignacion.inventario.estado === InventarioEstado.CERRADO) {
-    return { error: "El ciclo de inventario está cerrado", status: 403 as const };
-  }
-
   if (asignacion.estado === AsignacionEstado.COMPLETADA) {
     return { error: "Esta toma ya fue finalizada", status: 403 as const };
-  }
-
-  if (!asignacion.usuarioId) {
-    return { error: "Esta toma no tiene usuario asignado", status: 403 as const };
   }
 
   if (asignacion.usuarioId !== userId) {
@@ -91,10 +66,18 @@ export function decimalToNumber(value: { toNumber(): number } | number): number 
   return value.toNumber();
 }
 
-export function puedeContar(estado: AsignacionEstado): boolean {
-  return estado === AsignacionEstado.EN_PROGRESO;
+export function parseFechaParam(value: string | null): Date | undefined {
+  if (!value?.trim()) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return undefined;
+  return new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`);
 }
 
-export function puedeIniciar(estado: AsignacionEstado): boolean {
-  return estado === AsignacionEstado.PENDIENTE || estado === AsignacionEstado.PAUSADA;
+export function fechaToIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export function hoyUtc(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }

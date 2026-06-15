@@ -58,13 +58,13 @@ export async function findEmailDuplicado(email: string, excludeId?: string) {
 }
 
 export async function usuarioTieneHistorial(userId: string): Promise<boolean> {
-  const [asignaciones, conteos, noCatalogados, inventarios] = await Promise.all([
+  const [asignaciones, conteos, noCatalogados, tomasCreadas] = await Promise.all([
     prisma.asignacionInventarioArea.count({ where: { usuarioId: userId } }),
     prisma.conteoInventario.count({ where: { usuarioId: userId } }),
     prisma.productoNoCatalogado.count({ where: { usuarioId: userId } }),
-    prisma.inventario.count({ where: { creadoPorId: userId } }),
+    prisma.asignacionInventarioArea.count({ where: { creadoPorId: userId } }),
   ]);
-  return asignaciones + conteos + noCatalogados + inventarios > 0;
+  return asignaciones + conteos + noCatalogados + tomasCreadas > 0;
 }
 
 export async function countSupervisoresActivos(excludeId?: string): Promise<number> {

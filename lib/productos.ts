@@ -24,20 +24,16 @@ export interface ProductoResponse {
   descripcion: string;
   unidadMedida: string;
   categoria: string | null;
-  conteosCount?: number;
 }
 
-export function serializeProducto(
-  p: {
-    id: string;
-    codigoBarras: string;
-    codigoInterno: string | null;
-    descripcion: string;
-    unidadMedida: string;
-    categoria: string | null;
-  },
-  conteosCount?: number
-): ProductoResponse {
+export function serializeProducto(p: {
+  id: string;
+  codigoBarras: string;
+  codigoInterno: string | null;
+  descripcion: string;
+  unidadMedida: string;
+  categoria: string | null;
+}): ProductoResponse {
   return {
     id: p.id,
     codigoBarras: p.codigoBarras,
@@ -45,7 +41,6 @@ export function serializeProducto(
     descripcion: p.descripcion,
     unidadMedida: p.unidadMedida,
     categoria: p.categoria,
-    ...(conteosCount !== undefined ? { conteosCount } : {}),
   };
 }
 
@@ -123,6 +118,68 @@ export function buildProductoSearchWhere(q: string) {
       { descripcion: { contains: term, mode: "insensitive" as const } },
     ],
   };
+}
+
+export function productoDataChanged(
+  existing: {
+    codigoBarras: string;
+    codigoInterno: string | null;
+    descripcion: string;
+    unidadMedida: string;
+    categoria: string | null;
+    activo: boolean;
+  },
+  data: ProductoInput
+): boolean {
+  return (
+    existing.codigoBarras.toLowerCase() !== data.codigoBarras.toLowerCase() ||
+    (existing.codigoInterno ?? "") !== (data.codigoInterno ?? "") ||
+    existing.descripcion !== data.descripcion ||
+    existing.unidadMedida !== data.unidadMedida ||
+    (existing.categoria ?? "") !== (data.categoria ?? "") ||
+    !existing.activo
+  );
+}
+
+export async function previewImportRows(rows: unknown[][]) {
+  let creados = 0;
+  let modificados = 0;
+  let sinCambios = 0;
+  const errores: { fila: number; motivo: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const fila = i + 2;
+
+    const validated = validateProductoInput({
+      codigoBarras: cellToString(row[0]),
+      codigoInterno: cellToString(row[1]) || null,
+      descripcion: cellToString(row[2]),
+      unidadMedida: cellToString(row[3]) || "UN",
+      categoria: cellToString(row[4]) || null,
+    });
+
+    if (validated.error || !validated.data) {
+      errores.push({ fila, motivo: validated.error ?? "Datos inválidos" });
+      continue;
+    }
+
+    const existing = await prisma.producto.findFirst({
+      where: {
+        codigoBarras: { equals: validated.data.codigoBarras, mode: "insensitive" },
+      },
+    });
+
+    if (!existing) {
+      creados++;
+    } else if (productoDataChanged(existing, validated.data)) {
+      modificados++;
+    } else {
+      sinCambios++;
+    }
+  }
+
+  return { creados, modificados, sinCambios, errores, totalFilas: rows.length };
 }
 
 export function normalizeExcelHeader(value: unknown): string {

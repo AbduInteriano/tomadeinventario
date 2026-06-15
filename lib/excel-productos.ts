@@ -16,6 +16,39 @@ export async function createProductoTemplateBuffer(): Promise<Buffer> {
   return Buffer.from(buffer);
 }
 
+export async function createProductosExportBuffer(
+  productos: {
+    codigoBarras: string;
+    codigoInterno: string | null;
+    descripcion: string;
+    unidadMedida: string;
+    categoria: string | null;
+  }[]
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Productos");
+
+  sheet.addRow([...EXCEL_HEADERS]);
+  sheet.getRow(1).font = { bold: true };
+
+  for (const p of productos) {
+    sheet.addRow([
+      p.codigoBarras,
+      p.codigoInterno ?? "",
+      p.descripcion,
+      p.unidadMedida,
+      p.categoria ?? "",
+    ]);
+  }
+
+  EXCEL_HEADERS.forEach((_, i) => {
+    sheet.getColumn(i + 1).width = 20;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
 export async function parseProductoExcel(
   buffer: ArrayBuffer
 ): Promise<{ headers: unknown[]; rows: unknown[][] }> {

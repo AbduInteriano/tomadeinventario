@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
-import { ProductosClient } from "@/components/ProductosClient";
+import { TomasSupervisorClient } from "@/components/TomasSupervisorClient";
 import { requireRole } from "@/lib/session";
 import { Role } from "@prisma/client";
 
-export default async function ProductosPage() {
+export default async function TomasPage() {
   const session = await requireRole(Role.SUPERVISOR);
 
   return (
     <>
-      <AppHeader title="Productos" subtitle={session.user.name ?? undefined} />
-      <SupervisorNav currentPath="/supervisor/productos" />
+      <AppHeader title="Tomas de inventario" subtitle={session.user.name ?? undefined} />
+      <SupervisorNav currentPath="/supervisor/tomas" />
 
       <main className="mx-auto max-w-lg px-4 py-4">
         <Link
@@ -21,7 +21,7 @@ export default async function ProductosPage() {
           ← Volver al panel
         </Link>
 
-        <ProductosClient />
+        <TomasSupervisorClient />
       </main>
     </>
   );

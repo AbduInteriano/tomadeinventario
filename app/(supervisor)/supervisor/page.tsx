@@ -3,21 +3,26 @@ import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { hoyUtc } from "@/lib/inventario";
 import { Role } from "@prisma/client";
 
 export default async function SupervisorDashboardPage() {
   const session = await requireRole(Role.SUPERVISOR);
+  const hoy = hoyUtc();
 
-  const [puntosCount, productosCount, inventarioActivo] = await Promise.all([
+  const [puntosCount, productosCount, tomasHoy] = await Promise.all([
     prisma.punto.count({ where: { activo: true } }),
     prisma.producto.count({ where: { activo: true } }),
-    prisma.inventario.findFirst({
-      where: { estado: { in: ["ABIERTO", "EN_PROCESO"] } },
-      orderBy: { createdAt: "desc" },
-    }),
+    prisma.asignacionInventarioArea.count({ where: { fecha: hoy } }),
   ]);
 
   const modules = [
+    {
+      href: "/supervisor/tomas",
+      title: "Tomas de inventario",
+      description: "Asignar áreas a tomadores por fecha",
+      ready: true,
+    },
     {
       href: "/supervisor/puntos",
       title: "Puntos y Áreas",
@@ -27,20 +32,8 @@ export default async function SupervisorDashboardPage() {
     {
       href: "/supervisor/productos",
       title: "Catálogo de productos",
-      description: "CRUD y carga masiva Excel",
+      description: "CRUD, Excel y búsqueda",
       ready: true,
-    },
-    {
-      href: "/supervisor/inventarios",
-      title: "Inventarios",
-      description: "Ciclos, asignaciones y cierre",
-      ready: true,
-    },
-    {
-      href: "#",
-      title: "Reportes",
-      description: "Vista consolidada y exportación Excel",
-      ready: false,
     },
     {
       href: "/supervisor/usuarios",
@@ -68,12 +61,11 @@ export default async function SupervisorDashboardPage() {
         </div>
 
         <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <p className="text-sm font-medium text-slate-500">Inventario activo</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900">
-            {inventarioActivo
-              ? `Ciclo ${inventarioActivo.estado.replace("_", " ")}`
-              : "Ninguno"}
-          </p>
+          <p className="text-sm font-medium text-slate-500">Tomas hoy</p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">{tomasHoy}</p>
+          <Link href="/supervisor/tomas" className="mt-2 inline-block text-sm font-medium text-blue-600">
+            Gestionar tomas →
+          </Link>
         </div>
 
         <div className="space-y-2">
@@ -81,28 +73,17 @@ export default async function SupervisorDashboardPage() {
             Módulos
           </h2>
           <ul className="space-y-2">
-            {modules.map((mod) =>
-              mod.ready ? (
-                <li key={mod.title}>
-                  <Link
-                    href={mod.href}
-                    className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 active:bg-slate-50"
-                  >
-                    <p className="font-bold text-slate-900">{mod.title}</p>
-                    <p className="text-sm text-slate-500">{mod.description}</p>
-                  </Link>
-                </li>
-              ) : (
-                <li
-                  key={mod.title}
-                  className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200 opacity-60"
+            {modules.map((mod) => (
+              <li key={mod.title}>
+                <Link
+                  href={mod.href}
+                  className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 active:bg-slate-50"
                 >
-                  <p className="font-bold text-slate-700">{mod.title}</p>
+                  <p className="font-bold text-slate-900">{mod.title}</p>
                   <p className="text-sm text-slate-500">{mod.description}</p>
-                  <p className="mt-1 text-xs text-slate-400">Próximamente</p>
-                </li>
-              )
-            )}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       </main>

@@ -10,7 +10,10 @@ export default async function TomadorDashboardPage() {
 
   return (
     <>
-      <AppHeader title="Mis tomas" subtitle={session.user.name ?? undefined} />
+      <AppHeader
+        title={isSupervisor ? "Conteo — todas las tomas" : "Mis tomas"}
+        subtitle={session.user.name ?? undefined}
+      />
 
       <main className="mx-auto max-w-lg px-4 py-4">
         {isSupervisor && (

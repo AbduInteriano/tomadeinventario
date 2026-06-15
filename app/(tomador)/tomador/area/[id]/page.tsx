@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { requireConteoRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { decimalToNumber } from "@/lib/inventario";
+import { canViewAsignacion } from "@/lib/tomas";
 import { AppHeader, EstadoBadge } from "@/components/AppHeader";
 import { ConteoAreaClient } from "@/components/ConteoAreaClient";
+import { AsignacionEstado, Role } from "@prisma/client";
 
 export default async function ConteoAreaPage({
   params,
@@ -13,12 +15,18 @@ export default async function ConteoAreaPage({
 }) {
   const session = await requireConteoRole();
 
+  const access = await canViewAsignacion(params.id, session.user.id, session.user.role);
+  if ("error" in access) {
+    notFound();
+  }
+
   const asignacion = await prisma.asignacionInventarioArea.findUnique({
     where: { id: params.id },
     select: {
       id: true,
       estado: true,
       usuarioId: true,
+      usuario: { select: { nombre: true } },
       area: {
         select: {
           nombre: true,
@@ -28,9 +36,12 @@ export default async function ConteoAreaPage({
     },
   });
 
-  if (!asignacion || asignacion.usuarioId !== session.user.id) {
+  if (!asignacion) {
     notFound();
   }
+
+  const esPropia = asignacion.usuarioId === session.user.id;
+  const soloLectura = !esPropia || asignacion.estado === AsignacionEstado.COMPLETADA;
 
   const [conteos, noCatalogados] = await Promise.all([
     prisma.conteoInventario.findMany({
@@ -67,7 +78,7 @@ export default async function ConteoAreaPage({
         subtitle={`${asignacion.area.punto.nombre} · ${asignacion.area.nombre}`}
       />
 
-      <div className="mx-auto flex max-w-lg items-center gap-2 px-4 pt-2">
+      <div className="mx-auto flex max-w-lg flex-wrap items-center gap-2 px-4 pt-2">
         <Link
           href="/tomador"
           className="text-sm font-medium text-blue-600 active:text-blue-800"
@@ -75,6 +86,11 @@ export default async function ConteoAreaPage({
           ← Volver
         </Link>
         <EstadoBadge estado={asignacion.estado} />
+        {!esPropia && session.user.role === Role.SUPERVISOR && (
+          <span className="text-xs text-slate-500">
+            Asignada a {asignacion.usuario?.nombre ?? "sin usuario"}
+          </span>
+        )}
       </div>
 
       <ConteoAreaClient
@@ -82,6 +98,7 @@ export default async function ConteoAreaPage({
         areaNombre={asignacion.area.nombre}
         puntoNombre={asignacion.area.punto.nombre}
         estadoInicial={asignacion.estado}
+        soloLectura={soloLectura}
         conteosIniciales={conteos.map((c) => ({
           id: c.id,
           codigoBarras: c.producto.codigoBarras,

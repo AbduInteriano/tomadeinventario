@@ -8,8 +8,8 @@ import {
   validateProductoInput,
 } from "@/lib/productos";
 
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
 
 export async function GET(request: NextRequest) {
   const auth = await requireSupervisorApi();
@@ -22,8 +22,40 @@ export async function GET(request: NextRequest) {
     MAX_LIMIT,
     Math.max(1, parseInt(searchParams.get("limit") ?? String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT)
   );
+  const groupBy = searchParams.get("groupBy") === "categoria";
 
   const where = buildProductoSearchWhere(q);
+
+  if (groupBy && !q.trim()) {
+    const productos = await prisma.producto.findMany({
+      where,
+      orderBy: [{ categoria: "asc" }, { descripcion: "asc" }],
+      select: {
+        id: true,
+        codigoBarras: true,
+        codigoInterno: true,
+        descripcion: true,
+        unidadMedida: true,
+        categoria: true,
+      },
+    });
+
+    const gruposMap = new Map<string, ReturnType<typeof serializeProducto>[]>();
+    for (const p of productos) {
+      const key = p.categoria?.trim() || "Sin categoría";
+      if (!gruposMap.has(key)) gruposMap.set(key, []);
+      gruposMap.get(key)!.push(serializeProducto(p));
+    }
+
+    const grupos = Array.from(gruposMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([categoria, items]) => ({ categoria, productos: items, total: items.length }));
+
+    return NextResponse.json({
+      grupos,
+      pagination: { page: 1, limit: productos.length, total: productos.length, totalPages: 1 },
+    });
+  }
 
   const [productos, total] = await Promise.all([
     prisma.producto.findMany({
@@ -31,13 +63,20 @@ export async function GET(request: NextRequest) {
       orderBy: { descripcion: "asc" },
       skip: (page - 1) * limit,
       take: limit,
-      include: { _count: { select: { conteos: true } } },
+      select: {
+        id: true,
+        codigoBarras: true,
+        codigoInterno: true,
+        descripcion: true,
+        unidadMedida: true,
+        categoria: true,
+      },
     }),
     prisma.producto.count({ where }),
   ]);
 
   return NextResponse.json({
-    productos: productos.map((p) => serializeProducto(p, p._count.conteos)),
+    productos: productos.map(serializeProducto),
     pagination: {
       page,
       limit,

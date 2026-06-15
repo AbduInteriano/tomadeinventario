@@ -32,6 +32,7 @@ interface ConteoAreaClientProps {
   areaNombre: string;
   puntoNombre: string;
   estadoInicial: string;
+  soloLectura?: boolean;
   conteosIniciales: ConteoItem[];
   noCatalogadosIniciales: NoCatalogadoItem[];
 }
@@ -45,6 +46,7 @@ export function ConteoAreaClient({
   areaNombre,
   puntoNombre,
   estadoInicial,
+  soloLectura = false,
   conteosIniciales,
   noCatalogadosIniciales,
 }: ConteoAreaClientProps) {
@@ -266,8 +268,9 @@ export function ConteoAreaClient({
     }
   }
 
-  const puedeEscanear = estado === "EN_PROGRESO";
-  const bloqueado = estado === "COMPLETADA";
+  const puedeEscanear = estado === "EN_PROGRESO" && !soloLectura;
+  const bloqueado = estado === "COMPLETADA" || soloLectura;
+  const puedeGestionar = !soloLectura && estado !== "COMPLETADA";
 
   return (
     <div className="pb-28">
@@ -288,7 +291,13 @@ export function ConteoAreaClient({
           </p>
         </div>
 
-        {!bloqueado && estado === "PENDIENTE" && (
+        {soloLectura && estado !== "COMPLETADA" && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Vista de solo lectura. Solo el usuario asignado puede modificar esta toma.
+          </div>
+        )}
+
+        {!bloqueado && estado === "PENDIENTE" && puedeGestionar && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
             <p className="text-sm text-blue-900">
               Debes iniciar la toma antes de registrar conteos.
@@ -304,7 +313,7 @@ export function ConteoAreaClient({
           </div>
         )}
 
-        {!bloqueado && estado === "PAUSADA" && (
+        {!bloqueado && estado === "PAUSADA" && puedeGestionar && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
             <p className="text-sm text-amber-900">
               Esta toma está pausada. Reanúdala para seguir contando.
@@ -477,7 +486,7 @@ export function ConteoAreaClient({
         )}
       </div>
 
-      {!bloqueado && estado === "EN_PROGRESO" && (
+      {!bloqueado && estado === "EN_PROGRESO" && puedeGestionar && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex max-w-lg gap-2">
             <button

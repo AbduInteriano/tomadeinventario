@@ -13,12 +13,6 @@ enum Role {
   TOMADOR
 }
 
-enum InventarioEstado {
-  ABIERTO
-  EN_PROCESO
-  CERRADO
-}
-
 enum AsignacionEstado {
   PENDIENTE
   EN_PROGRESO
@@ -36,10 +30,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  asignaciones       AsignacionInventarioArea[]
-  conteos            ConteoInventario[]
-  noCatalogados      ProductoNoCatalogado[]
-  inventariosCreados Inventario[]
+  tomasAsignadas AsignacionInventarioArea[] @relation("TomasAsignadas")
+  tomasCreadas   AsignacionInventarioArea[] @relation("TomasCreadas")
+  conteos        ConteoInventario[]
+  noCatalogados  ProductoNoCatalogado[]
 
   @@index([activo])
 }
@@ -85,35 +79,29 @@ model Producto {
   @@index([codigoBarras])
   @@index([codigoInterno])
   @@index([activo])
-}
-
-model Inventario {
-  id          String                     @id @default(cuid())
-  estado      InventarioEstado           @default(ABIERTO)
-  creadoPorId String
-  creadoPor   User                       @relation(fields: [creadoPorId], references: [id])
-  asignaciones AsignacionInventarioArea[]
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  @@index([categoria])
 }
 
 model AsignacionInventarioArea {
-  id           String                 @id @default(cuid())
-  inventarioId String
-  areaId       String
-  usuarioId    String?
-  estado       AsignacionEstado       @default(PENDIENTE)
-  inventario   Inventario             @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
-  area         Area                   @relation(fields: [areaId], references: [id], onDelete: Cascade)
-  usuario      User?                  @relation(fields: [usuarioId], references: [id])
-  conteos      ConteoInventario[]
+  id            String                 @id @default(cuid())
+  areaId        String
+  usuarioId     String
+  creadoPorId   String
+  fecha         DateTime               @db.Date
+  estado        AsignacionEstado        @default(PENDIENTE)
+  area          Area                   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  usuario       User                   @relation("TomasAsignadas", fields: [usuarioId], references: [id])
+  creadoPor     User                   @relation("TomasCreadas", fields: [creadoPorId], references: [id])
+  conteos       ConteoInventario[]
   noCatalogados ProductoNoCatalogado[]
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
-  @@unique([inventarioId, areaId])
   @@index([usuarioId])
-  @@index([inventarioId])
+  @@index([creadoPorId])
+  @@index([fecha])
+  @@index([estado])
+  @@index([areaId])
 }
 
 model ConteoInventario {

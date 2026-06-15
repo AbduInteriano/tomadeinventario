@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     creados,
     actualizados,
+    modificados: actualizados,
     errores,
     totalFilas: parsed.rows.length,
   });

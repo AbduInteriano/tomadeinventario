@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decimalToNumber } from "@/lib/inventario";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
-import { AsignacionEstado, InventarioEstado, Prisma } from "@prisma/client";
+import { AsignacionEstado, Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   const auth = await requireConteoSessionApi();
@@ -46,15 +46,11 @@ export async function POST(request: NextRequest) {
         select: {
           estado: true,
           usuarioId: true,
-          inventario: { select: { estado: true } },
         },
       });
 
       if (!asignacion) {
         throw new Error("NOT_FOUND");
-      }
-      if (asignacion.inventario.estado === InventarioEstado.CERRADO) {
-        throw new Error("CERRADO");
       }
       if (asignacion.estado === AsignacionEstado.COMPLETADA) {
         throw new Error("FINALIZADA");
@@ -126,9 +122,6 @@ export async function POST(request: NextRequest) {
     const code = err instanceof Error ? err.message : "";
     if (code === "NOT_FOUND") {
       return NextResponse.json({ error: "Toma no encontrada" }, { status: 404 });
-    }
-    if (code === "CERRADO") {
-      return NextResponse.json({ error: "El ciclo de inventario está cerrado" }, { status: 403 });
     }
     if (code === "FINALIZADA") {
       return NextResponse.json({ error: "Esta toma ya fue finalizada" }, { status: 403 });
