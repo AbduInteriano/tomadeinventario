@@ -9,13 +9,12 @@ export interface InventarioListItem {
   id: string;
   estado: string;
   createdAt: string;
-  areasAsignadas: number;
-  areasCompletadas: number;
+  tomasTotal: number;
+  tomasFinalizadas: number;
 }
 
 interface InventariosClientProps {
   initialInventarios: InventarioListItem[];
-  inventarioActivoId: string | null;
 }
 
 type Flash = { type: "success" | "error"; message: string } | null;
@@ -43,7 +42,7 @@ function ProgressBar({
     <div className="mt-2">
       <div className="mb-1 flex items-center justify-between text-xs">
         <span className="font-medium text-slate-700">
-          {completadas}/{total} áreas completadas
+          {completadas}/{total} tomas finalizadas
         </span>
         <span className="text-slate-400">{pct}%</span>
       </div>
@@ -57,18 +56,12 @@ function ProgressBar({
   );
 }
 
-export function InventariosClient({
-  initialInventarios,
-  inventarioActivoId,
-}: InventariosClientProps) {
+export function InventariosClient({ initialInventarios }: InventariosClientProps) {
   const [inventarios, setInventarios] = useState(initialInventarios);
-  const [activoId, setActivoId] = useState(inventarioActivoId);
   const [loading, setLoading] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
 
   async function handleCreate() {
-    if (activoId) return;
-
     setLoading(true);
     setFlash(null);
 
@@ -78,7 +71,6 @@ export function InventariosClient({
 
     if (!res.ok) {
       setFlash({ type: "error", message: data.error ?? "Error al crear" });
-      if (data.inventarioActivoId) setActivoId(data.inventarioActivoId);
       return;
     }
 
@@ -87,13 +79,15 @@ export function InventariosClient({
         id: data.id,
         estado: data.estado,
         createdAt: data.createdAt,
-        areasAsignadas: data.areasAsignadas,
-        areasCompletadas: 0,
+        tomasTotal: data.tomasTotal ?? 0,
+        tomasFinalizadas: 0,
       },
       ...prev,
     ]);
-    setActivoId(data.id);
-    setFlash({ type: "success", message: "Inventario creado con todas las áreas activas" });
+    setFlash({
+      type: "success",
+      message: "Ciclo de inventario creado. Asigna tomas por área y usuario.",
+    });
   }
 
   return (
@@ -106,35 +100,18 @@ export function InventariosClient({
         />
       )}
 
-      {activoId ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-medium text-amber-900">
-            Ya hay un inventario activo
-          </p>
-          <p className="mt-1 text-sm text-amber-800">
-            Ciérralo antes de iniciar uno nuevo.
-          </p>
-          <Link
-            href={`/supervisor/inventarios/${activoId}`}
-            className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-amber-600 py-3 text-sm font-semibold text-white active:bg-amber-700"
-          >
-            Ir al inventario activo
-          </Link>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={loading}
-          className="w-full rounded-xl bg-blue-600 py-4 text-base font-semibold text-white shadow-sm active:bg-blue-700 disabled:opacity-60"
-        >
-          {loading ? "Creando…" : "+ Crear Nuevo Inventario"}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={handleCreate}
+        disabled={loading}
+        className="w-full rounded-xl bg-blue-600 py-4 text-base font-semibold text-white shadow-sm active:bg-blue-700 disabled:opacity-60"
+      >
+        {loading ? "Creando…" : "+ Crear ciclo de inventario"}
+      </button>
 
       {inventarios.length === 0 ? (
         <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
-          No hay inventarios registrados.
+          No hay ciclos de inventario registrados.
         </p>
       ) : (
         <ul className="space-y-3">
@@ -149,8 +126,8 @@ export function InventariosClient({
                   <EstadoBadge estado={inv.estado} />
                 </div>
                 <ProgressBar
-                  completadas={inv.areasCompletadas}
-                  total={inv.areasAsignadas}
+                  completadas={inv.tomasFinalizadas}
+                  total={inv.tomasTotal}
                 />
               </Link>
             </li>

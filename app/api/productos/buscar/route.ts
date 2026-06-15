@@ -3,6 +3,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const PRODUCTO_SELECT = {
+  id: true,
+  codigoBarras: true,
+  codigoInterno: true,
+  descripcion: true,
+  unidadMedida: true,
+  categoria: true,
+  activo: true,
+} as const;
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -14,12 +24,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Código requerido" }, { status: 400 });
   }
 
-  const producto = await prisma.producto.findFirst({
-    where: {
-      activo: true,
-      OR: [{ codigoBarras: codigo }, { codigoInterno: codigo }],
-    },
+  const byBarras = await prisma.producto.findUnique({
+    where: { codigoBarras: codigo },
+    select: PRODUCTO_SELECT,
   });
+
+  const producto =
+    byBarras?.activo === true
+      ? byBarras
+      : await prisma.producto.findFirst({
+          where: { codigoInterno: codigo, activo: true },
+          select: PRODUCTO_SELECT,
+        });
 
   if (!producto) {
     return NextResponse.json({ encontrado: false });

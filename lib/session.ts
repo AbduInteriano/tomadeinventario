@@ -22,3 +22,11 @@ export async function requireRole(role: Role) {
   }
   return session;
 }
+
+export async function requireConteoRole() {
+  const session = await requireAuth();
+  if (session.user.role !== Role.TOMADOR && session.user.role !== Role.SUPERVISOR) {
+    redirect("/login");
+  }
+  return session;
+}

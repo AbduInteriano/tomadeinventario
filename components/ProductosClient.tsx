@@ -11,7 +11,6 @@ export interface ProductoItem {
   descripcion: string;
   unidadMedida: string;
   categoria: string | null;
-  stockGlobal: number;
   conteosCount?: number;
 }
 
@@ -42,7 +41,6 @@ const emptyForm = {
   descripcion: "",
   unidadMedida: "UN",
   categoria: "",
-  stockGlobal: "0",
 };
 
 export function ProductosClient({
@@ -113,7 +111,6 @@ export function ProductosClient({
       descripcion: producto.descripcion,
       unidadMedida: producto.unidadMedida,
       categoria: producto.categoria ?? "",
-      stockGlobal: String(producto.stockGlobal),
     });
     setShowForm(true);
   }
@@ -129,7 +126,6 @@ export function ProductosClient({
       descripcion: form.descripcion,
       unidadMedida: form.unidadMedida,
       categoria: form.categoria || null,
-      stockGlobal: parseFloat(form.stockGlobal.replace(",", ".")) || 0,
     };
 
     const url = editing ? `/api/productos/${editing.id}` : "/api/productos";
@@ -308,7 +304,6 @@ export function ProductosClient({
             <Field label="Descripción *" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} required />
             <Field label="Unidad *" value={form.unidadMedida} onChange={(v) => setForm({ ...form, unidadMedida: v })} required />
             <Field label="Categoría" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} />
-            <Field label="Stock global" value={form.stockGlobal} onChange={(v) => setForm({ ...form, stockGlobal: v })} inputMode="decimal" />
           </div>
           <div className="mt-4 flex gap-2">
             <button
@@ -345,9 +340,6 @@ export function ProductosClient({
                 {p.codigoInterno && <span>Int: {p.codigoInterno}</span>}
                 <span>{p.unidadMedida}</span>
                 {p.categoria && <span>{p.categoria}</span>}
-                <span className="font-semibold text-blue-600">
-                  Stock: {p.stockGlobal}
-                </span>
               </div>
               {(p.conteosCount ?? 0) > 0 && (
                 <p className="mt-1 text-xs text-amber-600">

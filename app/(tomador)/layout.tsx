@@ -1,11 +1,10 @@
-import { requireRole } from "@/lib/session";
-import { Role } from "@prisma/client";
+import { requireConteoRole } from "@/lib/session";
 
 export default async function TomadorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole(Role.TOMADOR);
+  await requireConteoRole();
   return <div className="min-h-screen bg-slate-100">{children}</div>;
 }

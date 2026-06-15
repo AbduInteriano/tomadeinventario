@@ -1,52 +1,37 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getInventarioActivo } from "@/lib/inventario";
+import { requireConteoSessionApi } from "@/lib/conteo-auth";
+import { listTomadorTomorias, listAreasDisponiblesParaSupervisor, getOrCreateInventarioDefault } from "@/lib/tomas";
 import { Role } from "@prisma/client";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== Role.TOMADOR) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const auth = await requireConteoSessionApi();
+  if ("error" in auth) return auth.error;
+  const session = auth.session;
+  const isSupervisor = session.user.role === Role.SUPERVISOR;
 
-  const inventario = await getInventarioActivo();
-  if (!inventario) {
-    return NextResponse.json({ inventario: null, asignaciones: [] });
-  }
-
-  const asignaciones = await prisma.asignacionInventarioArea.findMany({
-    where: {
-      inventarioId: inventario.id,
-      usuarioId: session.user.id,
-    },
-    include: {
-      area: { include: { punto: true } },
-      _count: { select: { conteos: true, noCatalogados: true } },
-    },
-    orderBy: { area: { nombre: "asc" } },
-  });
-
-  const totalProductos = await prisma.producto.count({ where: { activo: true } });
+  const [asignaciones, supervisorData] = await Promise.all([
+    listTomadorTomorias(session.user.id),
+    isSupervisor
+      ? getOrCreateInventarioDefault(session.user.id).then(async (inv) => ({
+          inventarioDefaultId: inv.id,
+          areasDisponibles: await listAreasDisponiblesParaSupervisor(inv.id),
+        }))
+      : Promise.resolve(null),
+  ]);
 
   return NextResponse.json({
-    inventario: {
-      id: inventario.id,
-      estado: inventario.estado,
-      createdAt: inventario.createdAt,
-    },
     asignaciones: asignaciones.map((a) => ({
       id: a.id,
       estado: a.estado,
+      inventarioId: a.inventarioId,
       area: {
         id: a.area.id,
         nombre: a.area.nombre,
         punto: a.area.punto.nombre,
       },
       conteosCount: a._count.conteos,
-      noCatalogadosCount: a._count.noCatalogados,
     })),
-    totalProductos,
+    areasDisponibles: supervisorData?.areasDisponibles ?? [],
+    inventarioDefaultId: supervisorData?.inventarioDefaultId ?? null,
   });
 }

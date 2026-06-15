@@ -56,7 +56,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (pendientes.length > 0 && !body.forzar) {
     return NextResponse.json(
       {
-        error: "Hay áreas sin completar",
+        error: "Hay tomas sin finalizar",
         pendientes: pendientes.length,
         requiereConfirmacion: true,
       },

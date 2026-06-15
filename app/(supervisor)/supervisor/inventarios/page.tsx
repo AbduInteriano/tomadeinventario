@@ -4,14 +4,13 @@ import { SupervisorNav } from "@/components/SupervisorNav";
 import { InventariosClient } from "@/components/InventariosClient";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getInventarioActivo } from "@/lib/inventario";
 import { serializeInventarioListItem } from "@/lib/inventarios-admin";
 import { Role } from "@prisma/client";
 
 export default async function InventariosPage() {
   const session = await requireRole(Role.SUPERVISOR);
 
-  const [inventarios, activo] = await Promise.all([
+  const [inventarios] = await Promise.all([
     prisma.inventario.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -19,7 +18,6 @@ export default async function InventariosPage() {
         asignaciones: { select: { estado: true } },
       },
     }),
-    getInventarioActivo(),
   ]);
 
   return (
@@ -37,7 +35,6 @@ export default async function InventariosPage() {
 
         <InventariosClient
           initialInventarios={inventarios.map(serializeInventarioListItem)}
-          inventarioActivoId={activo?.id ?? null}
         />
       </main>
     </>

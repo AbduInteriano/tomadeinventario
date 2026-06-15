@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertAsignacionAccess, decimalToNumber } from "@/lib/inventario";
-import { Role } from "@prisma/client";
+import { requireConteoSessionApi } from "@/lib/conteo-auth";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== Role.TOMADOR) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const auth = await requireConteoSessionApi();
+  if ("error" in auth) return auth.error;
+  const session = auth.session;
 
   const access = await assertAsignacionAccess(params.id, session.user.id);
   if ("error" in access) {
@@ -21,7 +18,7 @@ export async function GET(
 
   const { asignacion } = access;
 
-  const [conteos, noCatalogados, totalProductos] = await Promise.all([
+  const [conteos, noCatalogados] = await Promise.all([
     prisma.conteoInventario.findMany({
       where: { asignacionId: asignacion.id },
       include: { producto: true },
@@ -31,7 +28,6 @@ export async function GET(
       where: { asignacionId: asignacion.id },
       orderBy: { timestamp: "desc" },
     }),
-    prisma.producto.count({ where: { activo: true } }),
   ]);
 
   return NextResponse.json({
@@ -61,6 +57,5 @@ export async function GET(
       cantidad: decimalToNumber(n.cantidad),
       timestamp: n.timestamp,
     })),
-    totalProductos,
   });
 }

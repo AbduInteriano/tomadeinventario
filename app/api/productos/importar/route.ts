@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import { parseProductoExcel } from "@/lib/excel-productos";
 import {
   cellToString,
-  parseStockGlobal,
   validateExcelHeaders,
   validateProductoInput,
 } from "@/lib/productos";
@@ -78,12 +76,6 @@ export async function POST(request: NextRequest) {
     const descripcion = cellToString(row[2]);
     const unidadMedida = cellToString(row[3]) || "UN";
     const categoria = cellToString(row[4]) || null;
-    const stockParsed = parseStockGlobal(row[5]);
-
-    if (stockParsed === null) {
-      errores.push({ fila, motivo: "Stock global inválido" });
-      continue;
-    }
 
     const validated = validateProductoInput({
       codigoBarras,
@@ -91,7 +83,6 @@ export async function POST(request: NextRequest) {
       descripcion,
       unidadMedida,
       categoria,
-      stockGlobal: stockParsed,
     });
 
     if (validated.error || !validated.data) {
@@ -117,22 +108,12 @@ export async function POST(request: NextRequest) {
             descripcion: data.descripcion,
             unidadMedida: data.unidadMedida,
             categoria: data.categoria,
-            stockGlobal: new Prisma.Decimal(data.stockGlobal),
             activo: true,
           },
         });
         actualizados++;
       } else {
-        await prisma.producto.create({
-          data: {
-            codigoBarras: data.codigoBarras,
-            codigoInterno: data.codigoInterno,
-            descripcion: data.descripcion,
-            unidadMedida: data.unidadMedida,
-            categoria: data.categoria,
-            stockGlobal: new Prisma.Decimal(data.stockGlobal),
-          },
-        });
+        await prisma.producto.create({ data });
         creados++;
       }
     } catch {

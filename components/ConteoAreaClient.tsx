@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 interface ProductoEncontrado {
@@ -33,30 +34,11 @@ interface ConteoAreaClientProps {
   estadoInicial: string;
   conteosIniciales: ConteoItem[];
   noCatalogadosIniciales: NoCatalogadoItem[];
-  totalProductos: number;
 }
 
 type PendingAction =
   | { type: "catalogado"; producto: ProductoEncontrado; codigo: string }
   | { type: "no-catalogado"; codigo: string };
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  retries = 3
-): Promise<Response> {
-  let lastError: unknown;
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url, options);
-      return res;
-    } catch (err) {
-      lastError = err;
-      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
-    }
-  }
-  throw lastError;
-}
 
 export function ConteoAreaClient({
   asignacionId,
@@ -65,10 +47,10 @@ export function ConteoAreaClient({
   estadoInicial,
   conteosIniciales,
   noCatalogadosIniciales,
-  totalProductos,
 }: ConteoAreaClientProps) {
   const [conteos, setConteos] = useState(conteosIniciales);
   const [noCatalogados, setNoCatalogados] = useState(noCatalogadosIniciales);
+  const router = useRouter();
   const [estado, setEstado] = useState(estadoInicial);
   const [codigoManual, setCodigoManual] = useState("");
   const [showScanner, setShowScanner] = useState(false);
@@ -87,9 +69,8 @@ export function ConteoAreaClient({
     setMessage(null);
 
     try {
-      const res = await fetchWithRetry(
-        `/api/productos/buscar?codigo=${encodeURIComponent(trimmed)}`,
-        { method: "GET" }
+      const res = await fetch(
+        `/api/productos/buscar?codigo=${encodeURIComponent(trimmed)}`
       );
       const data = await res.json();
 
@@ -120,35 +101,63 @@ export function ConteoAreaClient({
 
     setLoading(true);
     setMessage(null);
+    const previousConteos = conteos;
 
     try {
       if (pending.type === "catalogado") {
-        const res = await fetchWithRetry("/api/conteos", {
+        const producto = pending.producto;
+        const optimisticId = `tmp-${producto.id}`;
+        setConteos((prev) => {
+          const idx = prev.findIndex((c) => c.codigoBarras === producto.codigoBarras);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              cantidadContada: next[idx].cantidadContada + qty,
+            };
+            return next;
+          }
+          return [
+            {
+              id: optimisticId,
+              codigoBarras: producto.codigoBarras,
+              descripcion: producto.descripcion,
+              unidadMedida: producto.unidadMedida,
+              cantidadContada: qty,
+            },
+            ...prev,
+          ];
+        });
+        setPending(null);
+        setCodigoManual("");
+
+        const res = await fetch("/api/conteos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             asignacionId,
-            productoId: pending.producto.id,
+            productoId: producto.id,
             cantidad: qty,
           }),
         });
 
         if (!res.ok) {
           const err = await res.json();
+          setConteos(previousConteos);
           throw new Error(err.error ?? "Error al guardar");
         }
 
         const saved = await res.json();
         setConteos((prev) => {
-          const idx = prev.findIndex((c) => c.id === saved.id);
+          const withoutTmp = prev.filter((c) => c.id !== optimisticId);
+          const idx = withoutTmp.findIndex((c) => c.id === saved.id);
           if (idx >= 0) {
-            const next = [...prev];
+            const next = [...withoutTmp];
             next[idx] = saved;
             return next;
           }
-          return [saved, ...prev];
+          return [saved, ...withoutTmp];
         });
-        setEstado((e) => (e === "PENDIENTE" ? "EN_PROGRESO" : e));
         setMessage({ type: "ok", text: `Guardado: ${saved.descripcion} (${saved.cantidadContada} ${saved.unidadMedida})` });
       } else {
         if (!descripcionLibre.trim()) {
@@ -157,7 +166,7 @@ export function ConteoAreaClient({
           return;
         }
 
-        const res = await fetchWithRetry("/api/conteos/no-catalogado", {
+        const res = await fetch("/api/conteos/no-catalogado", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -175,7 +184,6 @@ export function ConteoAreaClient({
 
         const saved = await res.json();
         setNoCatalogados((prev) => [saved, ...prev]);
-        setEstado((e) => (e === "PENDIENTE" ? "EN_PROGRESO" : e));
         setMessage({ type: "ok", text: "Producto no catalogado registrado para revisión" });
       }
 
@@ -191,34 +199,75 @@ export function ConteoAreaClient({
     }
   }
 
-  async function marcarCompletada() {
-    if (!confirm("¿Marcar esta área como completada? No podrás agregar más conteos.")) {
-      return;
-    }
-
+  async function iniciarToma() {
     setCompletando(true);
     try {
-      const res = await fetch(`/api/asignaciones/${asignacionId}/completar`, {
-        method: "PATCH",
-      });
+      const res = await fetch(`/api/asignaciones/${asignacionId}/iniciar`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error ?? "Error");
       }
-      setEstado("COMPLETADA");
-      setMessage({ type: "ok", text: "Área marcada como completada" });
+      setEstado("EN_PROGRESO");
+      setMessage({ type: "ok", text: "Toma iniciada. Ya puedes registrar conteos." });
     } catch (err) {
       setMessage({
         type: "err",
-        text: err instanceof Error ? err.message : "Error al completar",
+        text: err instanceof Error ? err.message : "Error al iniciar",
       });
     } finally {
       setCompletando(false);
     }
   }
 
+  async function pausarToma() {
+    setCompletando(true);
+    try {
+      const res = await fetch(`/api/asignaciones/${asignacionId}/pausar`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Error");
+      }
+      setEstado("PAUSADA");
+      setMessage({ type: "ok", text: "Toma pausada. Puedes volver más tarde." });
+    } catch (err) {
+      setMessage({
+        type: "err",
+        text: err instanceof Error ? err.message : "Error al pausar",
+      });
+    } finally {
+      setCompletando(false);
+    }
+  }
+
+  async function finalizarToma() {
+    if (!confirm("¿Finalizar esta toma? No podrás agregar más conteos.")) {
+      return;
+    }
+
+    setCompletando(true);
+    try {
+      const res = await fetch(`/api/asignaciones/${asignacionId}/finalizar`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Error");
+      }
+      setEstado("COMPLETADA");
+      setMessage({ type: "ok", text: "Toma finalizada correctamente" });
+      router.push("/tomador");
+    } catch (err) {
+      setMessage({
+        type: "err",
+        text: err instanceof Error ? err.message : "Error al finalizar",
+      });
+    } finally {
+      setCompletando(false);
+    }
+  }
+
+  const puedeEscanear = estado === "EN_PROGRESO";
   const bloqueado = estado === "COMPLETADA";
-  const progreso = totalProductos > 0 ? Math.round((conteos.length / totalProductos) * 100) : 0;
 
   return (
     <div className="pb-28">
@@ -233,23 +282,45 @@ export function ConteoAreaClient({
         <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm text-slate-500">{puntoNombre}</p>
           <p className="text-xl font-bold text-slate-900">{areaNombre}</p>
-          <div className="mt-3">
-            <div className="mb-1 flex justify-between text-sm">
-              <span className="text-slate-600">Productos contados</span>
-              <span className="font-medium text-slate-900">
-                {conteos.length} / {totalProductos}
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all"
-                style={{ width: `${Math.min(progreso, 100)}%` }}
-              />
-            </div>
-          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            {conteos.length}{" "}
+            {conteos.length === 1 ? "producto registrado" : "productos registrados"}
+          </p>
         </div>
 
-        {!bloqueado && (
+        {!bloqueado && estado === "PENDIENTE" && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
+            <p className="text-sm text-blue-900">
+              Debes iniciar la toma antes de registrar conteos.
+            </p>
+            <button
+              type="button"
+              onClick={iniciarToma}
+              disabled={completando}
+              className="mt-3 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-60"
+            >
+              {completando ? "Iniciando…" : "Iniciar toma"}
+            </button>
+          </div>
+        )}
+
+        {!bloqueado && estado === "PAUSADA" && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+            <p className="text-sm text-amber-900">
+              Esta toma está pausada. Reanúdala para seguir contando.
+            </p>
+            <button
+              type="button"
+              onClick={iniciarToma}
+              disabled={completando}
+              className="mt-3 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-60"
+            >
+              {completando ? "Reanudando…" : "Reanudar toma"}
+            </button>
+          </div>
+        )}
+
+        {puedeEscanear && (
           <div className="space-y-3">
             <button
               type="button"
@@ -406,16 +477,26 @@ export function ConteoAreaClient({
         )}
       </div>
 
-      {!bloqueado && (
+      {!bloqueado && estado === "EN_PROGRESO" && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white p-4">
-          <button
-            type="button"
-            onClick={marcarCompletada}
-            disabled={completando}
-            className="mx-auto block w-full max-w-lg rounded-xl border-2 border-green-600 py-3.5 font-semibold text-green-700 active:bg-green-50 disabled:opacity-60"
-          >
-            {completando ? "Completando…" : "Marcar área como completada"}
-          </button>
+          <div className="mx-auto flex max-w-lg gap-2">
+            <button
+              type="button"
+              onClick={pausarToma}
+              disabled={completando}
+              className="flex-1 rounded-xl border-2 border-amber-500 py-3.5 font-semibold text-amber-700 active:bg-amber-50 disabled:opacity-60"
+            >
+              {completando ? "…" : "Pausar"}
+            </button>
+            <button
+              type="button"
+              onClick={finalizarToma}
+              disabled={completando}
+              className="flex-1 rounded-xl border-2 border-green-600 py-3.5 font-semibold text-green-700 active:bg-green-50 disabled:opacity-60"
+            >
+              {completando ? "…" : "Finalizar"}
+            </button>
+          </div>
         </div>
       )}
     </div>

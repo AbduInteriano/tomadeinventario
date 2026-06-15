@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeNombre } from "@/lib/api-auth";
 
@@ -8,7 +7,6 @@ export const EXCEL_HEADERS = [
   "Descripción",
   "Unidad",
   "Categoría",
-  "Stock Global",
 ] as const;
 
 export interface ProductoInput {
@@ -17,7 +15,6 @@ export interface ProductoInput {
   descripcion: string;
   unidadMedida: string;
   categoria?: string | null;
-  stockGlobal: number;
 }
 
 export interface ProductoResponse {
@@ -27,13 +24,7 @@ export interface ProductoResponse {
   descripcion: string;
   unidadMedida: string;
   categoria: string | null;
-  stockGlobal: number;
   conteosCount?: number;
-}
-
-export function decimalToNumber(value: Prisma.Decimal | number): number {
-  if (typeof value === "number") return value;
-  return value.toNumber();
 }
 
 export function serializeProducto(
@@ -44,7 +35,6 @@ export function serializeProducto(
     descripcion: string;
     unidadMedida: string;
     categoria: string | null;
-    stockGlobal: Prisma.Decimal;
   },
   conteosCount?: number
 ): ProductoResponse {
@@ -55,7 +45,6 @@ export function serializeProducto(
     descripcion: p.descripcion,
     unidadMedida: p.unidadMedida,
     categoria: p.categoria,
-    stockGlobal: decimalToNumber(p.stockGlobal),
     ...(conteosCount !== undefined ? { conteosCount } : {}),
   };
 }
@@ -89,11 +78,6 @@ export function validateProductoInput(
     return { error: "La unidad de medida es obligatoria" };
   }
 
-  const stockGlobal = input.stockGlobal ?? 0;
-  if (typeof stockGlobal !== "number" || !Number.isFinite(stockGlobal) || stockGlobal < 0) {
-    return { error: "El stock global debe ser un número mayor o igual a 0" };
-  }
-
   const codigoInterno = input.codigoInterno?.trim() || null;
   const categoria = input.categoria?.trim() || null;
 
@@ -104,7 +88,6 @@ export function validateProductoInput(
       descripcion,
       unidadMedida: unidadMedida || "UN",
       categoria,
-      stockGlobal,
     },
   };
 }
@@ -155,16 +138,6 @@ export function validateExcelHeaders(row: unknown[]): boolean {
   return EXCEL_HEADERS.every(
     (expected, i) => normalizeExcelHeader(row[i]) === normalizeExcelHeader(expected)
   );
-}
-
-export function parseStockGlobal(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return 0;
-  const num =
-    typeof value === "number"
-      ? value
-      : parseFloat(String(value).replace(",", "."));
-  if (!Number.isFinite(num) || num < 0) return null;
-  return num;
 }
 
 export function cellToString(value: unknown): string {

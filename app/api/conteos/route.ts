@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assertAsignacionAccess, decimalToNumber } from "@/lib/inventario";
-import { Role, AsignacionEstado, InventarioEstado } from "@prisma/client";
-import { Prisma } from "@prisma/client";
+import { decimalToNumber } from "@/lib/inventario";
+import { requireConteoSessionApi } from "@/lib/conteo-auth";
+import { AsignacionEstado, InventarioEstado, Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== Role.TOMADOR) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const auth = await requireConteoSessionApi();
+  if ("error" in auth) return auth.error;
+  const session = auth.session;
 
   let body: {
     asignacionId: string;
@@ -40,62 +37,120 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const access = await assertAsignacionAccess(asignacionId, session.user.id);
-  if ("error" in access) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
-  }
-
-  const producto = await prisma.producto.findUnique({
-    where: { id: productoId },
-  });
-
-  if (!producto || !producto.activo) {
-    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
-  }
-
   const cantidadDecimal = new Prisma.Decimal(cantidad);
 
-  const conteo = await prisma.$transaction(async (tx) => {
-    if (access.asignacion.estado === AsignacionEstado.PENDIENTE) {
-      await tx.asignacionInventarioArea.update({
+  try {
+    const conteo = await prisma.$transaction(async (tx) => {
+      const asignacion = await tx.asignacionInventarioArea.findUnique({
         where: { id: asignacionId },
-        data: { estado: AsignacionEstado.EN_PROGRESO },
+        select: {
+          estado: true,
+          usuarioId: true,
+          inventario: { select: { estado: true } },
+        },
       });
-    }
 
-    if (access.asignacion.inventario.estado === InventarioEstado.ABIERTO) {
-      await tx.inventario.update({
-        where: { id: access.asignacion.inventarioId },
-        data: { estado: InventarioEstado.EN_PROCESO },
+      if (!asignacion) {
+        throw new Error("NOT_FOUND");
+      }
+      if (asignacion.inventario.estado === InventarioEstado.CERRADO) {
+        throw new Error("CERRADO");
+      }
+      if (asignacion.estado === AsignacionEstado.COMPLETADA) {
+        throw new Error("FINALIZADA");
+      }
+      if (!asignacion.usuarioId || asignacion.usuarioId !== session.user.id) {
+        throw new Error("FORBIDDEN");
+      }
+      if (asignacion.estado !== AsignacionEstado.EN_PROGRESO) {
+        throw new Error(
+          asignacion.estado === AsignacionEstado.PAUSADA ? "PAUSADA" : "NO_INICIADA"
+        );
+      }
+
+      const producto = await tx.producto.findFirst({
+        where: { id: productoId, activo: true },
+        select: {
+          id: true,
+          codigoBarras: true,
+          descripcion: true,
+          unidadMedida: true,
+        },
       });
-    }
 
-    return tx.conteoInventario.upsert({
-      where: {
-        asignacionId_productoId: { asignacionId, productoId },
-      },
-      create: {
-        asignacionId,
-        productoId,
-        cantidadContada: cantidadDecimal,
-        usuarioId: session.user.id,
-      },
-      update: {
-        cantidadContada: { increment: cantidadDecimal },
-        usuarioId: session.user.id,
-        timestamp: new Date(),
-      },
-      include: { producto: true },
+      if (!producto) {
+        throw new Error("PRODUCTO");
+      }
+
+      return tx.conteoInventario.upsert({
+        where: {
+          asignacionId_productoId: { asignacionId, productoId },
+        },
+        create: {
+          asignacionId,
+          productoId,
+          cantidadContada: cantidadDecimal,
+          usuarioId: session.user.id,
+        },
+        update: {
+          cantidadContada: { increment: cantidadDecimal },
+          usuarioId: session.user.id,
+          timestamp: new Date(),
+        },
+        select: {
+          id: true,
+          productoId: true,
+          cantidadContada: true,
+          timestamp: true,
+          producto: {
+            select: {
+              codigoBarras: true,
+              descripcion: true,
+              unidadMedida: true,
+            },
+          },
+        },
+      });
     });
-  });
 
-  return NextResponse.json({
-    id: conteo.id,
-    productoId: conteo.productoId,
-    codigoBarras: conteo.producto.codigoBarras,
-    descripcion: conteo.producto.descripcion,
-    unidadMedida: conteo.producto.unidadMedida,
-    cantidadContada: decimalToNumber(conteo.cantidadContada),
-    timestamp: conteo.timestamp,
-  });
+    return NextResponse.json({
+      id: conteo.id,
+      productoId: conteo.productoId,
+      codigoBarras: conteo.producto.codigoBarras,
+      descripcion: conteo.producto.descripcion,
+      unidadMedida: conteo.producto.unidadMedida,
+      cantidadContada: decimalToNumber(conteo.cantidadContada),
+      timestamp: conteo.timestamp,
+    });
+  } catch (err) {
+    const code = err instanceof Error ? err.message : "";
+    if (code === "NOT_FOUND") {
+      return NextResponse.json({ error: "Toma no encontrada" }, { status: 404 });
+    }
+    if (code === "CERRADO") {
+      return NextResponse.json({ error: "El ciclo de inventario está cerrado" }, { status: 403 });
+    }
+    if (code === "FINALIZADA") {
+      return NextResponse.json({ error: "Esta toma ya fue finalizada" }, { status: 403 });
+    }
+    if (code === "FORBIDDEN") {
+      return NextResponse.json({ error: "No tienes acceso a esta toma" }, { status: 403 });
+    }
+    if (code === "PAUSADA") {
+      return NextResponse.json(
+        { error: "La toma está pausada. Reanúdala para continuar contando." },
+        { status: 403 }
+      );
+    }
+    if (code === "NO_INICIADA") {
+      return NextResponse.json(
+        { error: "Debes iniciar la toma antes de registrar conteos." },
+        { status: 403 }
+      );
+    }
+    if (code === "PRODUCTO") {
+      return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+    }
+    throw err;
+  }
 }

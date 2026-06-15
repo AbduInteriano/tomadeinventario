@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import {
@@ -43,10 +42,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         body.categoria !== undefined
           ? (body.categoria as string | null)
           : producto.categoria,
-      stockGlobal:
-        body.stockGlobal !== undefined
-          ? Number(body.stockGlobal)
-          : producto.stockGlobal.toNumber(),
     },
     true
   );
@@ -73,7 +68,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       descripcion: data.descripcion,
       unidadMedida: data.unidadMedida,
       categoria: data.categoria,
-      stockGlobal: new Prisma.Decimal(data.stockGlobal),
     },
     include: { _count: { select: { conteos: true } } },
   });

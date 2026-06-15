@@ -32,8 +32,9 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
 const ESTADO_LABELS: Record<string, string> = {
   PENDIENTE: "Pendiente",
   EN_PROGRESO: "En progreso",
+  PAUSADA: "Pausada",
   EN_PROCESO: "En proceso",
-  COMPLETADA: "Completada",
+  COMPLETADA: "Finalizada",
   ABIERTO: "Abierto",
   CERRADO: "Cerrado",
 };
@@ -41,6 +42,7 @@ const ESTADO_LABELS: Record<string, string> = {
 const ESTADO_COLORS: Record<string, string> = {
   PENDIENTE: "bg-slate-100 text-slate-600",
   EN_PROGRESO: "bg-amber-100 text-amber-800",
+  PAUSADA: "bg-blue-100 text-blue-800",
   EN_PROCESO: "bg-amber-100 text-amber-800",
   COMPLETADA: "bg-green-100 text-green-800",
   ABIERTO: "bg-green-100 text-green-800",

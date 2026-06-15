@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AsignacionEstado, InventarioEstado, Role } from "@prisma/client";
+import { AsignacionEstado, InventarioEstado } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import { buildInventarioDetalle } from "@/lib/inventarios-admin";
@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         puntoNombre: p.nombre,
       }))
     ),
-    tomadores: detalle.tomadores,
+    tomadores: detalle.usuariosAsignables,
   });
 }
 
@@ -112,12 +112,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       continue;
     }
 
-    const tomador = await prisma.user.findFirst({
-      where: { id: item.usuarioId, role: Role.TOMADOR, activo: true },
+    const usuario = await prisma.user.findFirst({
+      where: { id: item.usuarioId, activo: true },
     });
 
-    if (!tomador) {
-      return NextResponse.json({ error: "Tomador no válido o inactivo" }, { status: 400 });
+    if (!usuario) {
+      return NextResponse.json({ error: "Usuario no válido o inactivo" }, { status: 400 });
     }
 
     if (
@@ -141,6 +141,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return NextResponse.json({
     ok: true,
     warnings: Array.from(new Set(warnings)),
-    ...(detalle ? { stats: detalle.stats, puntos: detalle.puntos } : {}),
+    ...(detalle ?? {}),
   });
 }

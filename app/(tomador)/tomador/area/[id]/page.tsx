@@ -1,24 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/session";
+import { requireConteoRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { decimalToNumber } from "@/lib/inventario";
 import { AppHeader, EstadoBadge } from "@/components/AppHeader";
 import { ConteoAreaClient } from "@/components/ConteoAreaClient";
-import { Role } from "@prisma/client";
 
 export default async function ConteoAreaPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const session = await requireRole(Role.TOMADOR);
+  const session = await requireConteoRole();
 
   const asignacion = await prisma.asignacionInventarioArea.findUnique({
     where: { id: params.id },
-    include: {
-      area: { include: { punto: true } },
-      inventario: true,
+    select: {
+      id: true,
+      estado: true,
+      usuarioId: true,
+      area: {
+        select: {
+          nombre: true,
+          punto: { select: { nombre: true } },
+        },
+      },
     },
   });
 
@@ -26,17 +32,32 @@ export default async function ConteoAreaPage({
     notFound();
   }
 
-  const [conteos, noCatalogados, totalProductos] = await Promise.all([
+  const [conteos, noCatalogados] = await Promise.all([
     prisma.conteoInventario.findMany({
       where: { asignacionId: asignacion.id },
-      include: { producto: true },
+      select: {
+        id: true,
+        cantidadContada: true,
+        producto: {
+          select: {
+            codigoBarras: true,
+            descripcion: true,
+            unidadMedida: true,
+          },
+        },
+      },
       orderBy: { timestamp: "desc" },
     }),
     prisma.productoNoCatalogado.findMany({
       where: { asignacionId: asignacion.id },
+      select: {
+        id: true,
+        codigoEscaneado: true,
+        descripcionLibre: true,
+        cantidad: true,
+      },
       orderBy: { timestamp: "desc" },
     }),
-    prisma.producto.count({ where: { activo: true } }),
   ]);
 
   return (
@@ -61,7 +82,6 @@ export default async function ConteoAreaPage({
         areaNombre={asignacion.area.nombre}
         puntoNombre={asignacion.area.punto.nombre}
         estadoInicial={asignacion.estado}
-        totalProductos={totalProductos}
         conteosIniciales={conteos.map((c) => ({
           id: c.id,
           codigoBarras: c.producto.codigoBarras,

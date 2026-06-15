@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import {
@@ -38,9 +37,7 @@ export async function GET(request: NextRequest) {
   ]);
 
   return NextResponse.json({
-    productos: productos.map((p) =>
-      serializeProducto(p, p._count.conteos)
-    ),
+    productos: productos.map((p) => serializeProducto(p, p._count.conteos)),
     pagination: {
       page,
       limit,
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
     descripcion: body.descripcion as string,
     unidadMedida: body.unidadMedida as string,
     categoria: body.categoria as string | null,
-    stockGlobal: Number(body.stockGlobal ?? 0),
   });
 
   if (validated.error || !validated.data) {
@@ -92,7 +88,6 @@ export async function POST(request: NextRequest) {
         descripcion: data.descripcion,
         unidadMedida: data.unidadMedida,
         categoria: data.categoria,
-        stockGlobal: new Prisma.Decimal(data.stockGlobal),
         activo: true,
       },
     });
@@ -107,16 +102,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const producto = await prisma.producto.create({
-    data: {
-      codigoBarras: data.codigoBarras,
-      codigoInterno: data.codigoInterno,
-      descripcion: data.descripcion,
-      unidadMedida: data.unidadMedida,
-      categoria: data.categoria,
-      stockGlobal: new Prisma.Decimal(data.stockGlobal),
-    },
-  });
+  const producto = await prisma.producto.create({ data });
 
   return NextResponse.json(serializeProducto(producto), { status: 201 });
 }

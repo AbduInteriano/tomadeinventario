@@ -5,10 +5,11 @@ import { FlashMessage } from "@/components/FlashMessage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EstadoBadge } from "@/components/AppHeader";
 
-interface Tomador {
+interface UsuarioAsignable {
   id: string;
   nombre: string;
   email: string;
+  role: string;
 }
 
 interface AreaAsignacion {
@@ -33,8 +34,16 @@ interface Stats {
   total: number;
   completadas: number;
   enProgreso: number;
+  pausadas: number;
   pendientes: number;
   sinAsignar: number;
+}
+
+interface AreaDisponible {
+  id: string;
+  nombre: string;
+  punto: string;
+  tieneTomaActiva: boolean;
 }
 
 export interface InventarioDetalleData {
@@ -45,7 +54,8 @@ export interface InventarioDetalleData {
   };
   stats: Stats;
   puntos: PuntoGrupo[];
-  tomadores: Tomador[];
+  areasDisponibles: AreaDisponible[];
+  usuariosAsignables: UsuarioAsignable[];
 }
 
 interface InventarioDetailClientProps {
@@ -95,6 +105,8 @@ export function InventarioDetailClient({
     const first = initialData.puntos[0]?.id;
     return new Set(first ? [first] : []);
   });
+  const [nuevaAreaId, setNuevaAreaId] = useState("");
+  const [nuevoUsuarioId, setNuevoUsuarioId] = useState("");
 
   const cerrado = data.inventario.estado === "CERRADO";
   const globalPct =
@@ -121,7 +133,48 @@ export function InventarioDetailClient({
     });
   }
 
-  async function assignTomador(asignacionId: string, usuarioId: string) {
+  async function crearToma() {
+    if (!nuevaAreaId || !nuevoUsuarioId) {
+      setFlash({ type: "error", message: "Selecciona área y usuario" });
+      return;
+    }
+
+    setLoading(true);
+    setFlash(null);
+
+    const res = await fetch(`/api/inventarios/${inventarioId}/tomas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        areaId: nuevaAreaId,
+        usuarioId: nuevoUsuarioId,
+      }),
+    });
+
+    const result = await res.json();
+    setLoading(false);
+
+    if (!res.ok) {
+      setFlash({ type: "error", message: result.error ?? "Error al crear toma" });
+      return;
+    }
+
+    setNuevaAreaId("");
+    setNuevoUsuarioId("");
+    if (result.stats && result.puntos) {
+      setData((prev) => ({
+        ...prev,
+        stats: result.stats,
+        puntos: result.puntos,
+        areasDisponibles: result.areasDisponibles ?? prev.areasDisponibles,
+      }));
+    } else {
+      await refresh();
+    }
+    setFlash({ type: "success", message: "Toma creada y asignada" });
+  }
+
+  async function assignUsuario(asignacionId: string, usuarioId: string) {
     setLoading(true);
     setFlash(null);
 
@@ -148,6 +201,7 @@ export function InventarioDetailClient({
         ...prev,
         stats: result.stats,
         puntos: result.puntos,
+        areasDisponibles: result.areasDisponibles ?? prev.areasDisponibles,
       }));
     } else {
       await refresh();
@@ -211,10 +265,13 @@ export function InventarioDetailClient({
         <div className="mt-2">
           <div className="flex items-center justify-between text-xs text-slate-600">
             <span>
-              {data.stats.completadas}/{data.stats.total} áreas completadas
+              {data.stats.completadas}/{data.stats.total} tomas finalizadas
             </span>
             <span>{globalPct}%</span>
           </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Crea tomas por área y asigna un usuario. Cada usuario inicia, pausa y finaliza su toma.
+          </p>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
             <div
               className="h-full rounded-full bg-green-500 transition-all"
@@ -232,9 +289,57 @@ export function InventarioDetailClient({
         />
       )}
 
+      {!cerrado && data.areasDisponibles.length > 0 && (
+        <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
+          <h2 className="text-sm font-semibold text-slate-900">Nueva toma</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Asigna el conteo de un área a un usuario. Los productos del catálogo están disponibles para todos.
+          </p>
+          <div className="mt-3 space-y-2">
+            <select
+              value={nuevaAreaId}
+              onChange={(e) => setNuevaAreaId(e.target.value)}
+              disabled={loading}
+              className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm"
+            >
+              <option value="">Seleccionar área…</option>
+              {data.areasDisponibles
+                .filter((a) => !a.tieneTomaActiva)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.punto} · {a.nombre}
+                  </option>
+                ))}
+            </select>
+            <select
+              value={nuevoUsuarioId}
+              onChange={(e) => setNuevoUsuarioId(e.target.value)}
+              disabled={loading}
+              className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm"
+            >
+              <option value="">Seleccionar usuario…</option>
+              {data.usuariosAsignables.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre}
+                  {u.role === "SUPERVISOR" ? " (Supervisor)" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={crearToma}
+              disabled={loading || !nuevaAreaId || !nuevoUsuarioId}
+              className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Crear toma
+            </button>
+          </div>
+        </div>
+      )}
+
       {data.puntos.length === 0 ? (
         <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-          No hay áreas activas en el sistema.
+          Aún no hay tomas en este ciclo. Crea una arriba para asignar áreas a usuarios.
         </p>
       ) : (
         <div className="space-y-2">
@@ -261,7 +366,8 @@ export function InventarioDetailClient({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-slate-900">{punto.nombre}</p>
                     <p className="text-xs text-slate-500">
-                      {completadas}/{total} completadas
+                      {completadas}/{total} finalizadas
+                      {data.stats.pausadas > 0 && ` · ${data.stats.pausadas} pausadas`}
                     </p>
                   </div>
                   <span
@@ -290,16 +396,17 @@ export function InventarioDetailClient({
                             <select
                               value={area.usuarioId ?? ""}
                               onChange={(e) =>
-                                assignTomador(area.asignacionId, e.target.value)
+                                assignUsuario(area.asignacionId, e.target.value)
                               }
                               disabled={loading}
                               className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm"
-                              aria-label={`Tomador para ${area.areaNombre}`}
+                              aria-label={`Usuario para ${area.areaNombre}`}
                             >
                               <option value="">Sin asignar</option>
-                              {data.tomadores.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.nombre}
+                              {data.usuariosAsignables.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.nombre}
+                                  {u.role === "SUPERVISOR" ? " (Supervisor)" : ""}
                                 </option>
                               ))}
                             </select>
@@ -331,8 +438,8 @@ export function InventarioDetailClient({
         title="Cerrar inventario"
         message={
           data.stats.completadas === data.stats.total
-            ? "¿Cerrar este inventario? No se podrán registrar más conteos."
-            : `Quedan ${data.stats.total - data.stats.completadas} área(s) sin completar. ¿Cerrar de todas formas? Los conteos quedarán bloqueados.`
+            ? "¿Cerrar este ciclo? No se podrán registrar más conteos en sus tomas."
+            : `Quedan ${data.stats.total - data.stats.completadas} toma(s) sin finalizar. ¿Cerrar de todas formas?`
         }
         confirmLabel="Cerrar inventario"
         loading={loading}
