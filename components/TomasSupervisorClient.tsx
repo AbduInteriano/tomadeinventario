@@ -9,6 +9,7 @@ interface TomaItem {
   id: string;
   estado: string;
   fecha: string;
+  archivada?: boolean;
   usuarioId: string;
   usuarioNombre: string;
   esPropia: boolean;
@@ -40,11 +41,17 @@ export function TomasSupervisorClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [includeArchivadas, setIncludeArchivadas] = useState(false);
+  const [archivandoId, setArchivandoId] = useState<string | null>(null);
 
-  const refresh = useCallback(async (fechaQuery?: string) => {
+  const refresh = useCallback(async (fechaQuery?: string, archivadas?: boolean) => {
     setLoading(true);
     const q = fechaQuery ?? fecha;
-    const res = await fetch(`/api/tomas${q ? `?fecha=${q}` : ""}`);
+    const showArchivadas = archivadas ?? includeArchivadas;
+    const params = new URLSearchParams();
+    if (q) params.set("fecha", q);
+    if (showArchivadas) params.set("archivadas", "1");
+    const res = await fetch(`/api/tomas${params.toString() ? `?${params}` : ""}`);
     if (res.ok) {
       const data = await res.json();
       setFecha(data.fecha);
@@ -54,7 +61,7 @@ export function TomasSupervisorClient() {
       setUsuarios(data.usuarios ?? []);
     }
     setLoading(false);
-  }, [fecha]);
+  }, [fecha, includeArchivadas]);
 
   useEffect(() => {
     refresh("");
@@ -115,6 +122,31 @@ export function TomasSupervisorClient() {
         ? `${data.creadas} toma(s) creada(s). ${data.warnings.join(" ")}`
         : `${data.creadas} toma(s) creada(s) y asignada(s)`;
     setFlash({ type: "success", message: msg });
+  }
+
+  async function archivarToma(id: string) {
+    if (!confirm("¿Archivar esta toma? Dejará de aparecer en la lista principal.")) {
+      return;
+    }
+
+    setArchivandoId(id);
+    setFlash(null);
+
+    const res = await fetch(`/api/tomas/${id}/archivar`, { method: "POST" });
+    const data = await res.json();
+    setArchivandoId(null);
+
+    if (!res.ok) {
+      setFlash({ type: "error", message: data.error ?? "No se pudo archivar la toma" });
+      return;
+    }
+
+    setTomas((prev) =>
+      includeArchivadas
+        ? prev.map((t) => (t.id === id ? { ...t, archivada: true } : t))
+        : prev.filter((t) => t.id !== id)
+    );
+    setFlash({ type: "success", message: "Toma archivada correctamente" });
   }
 
   const activas = tomas.filter((t) => t.estado !== "COMPLETADA");
@@ -219,7 +251,7 @@ export function TomasSupervisorClient() {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-slate-600">Filtrar por fecha:</span>
         <select
           value={fecha}
@@ -232,6 +264,17 @@ export function TomasSupervisorClient() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={includeArchivadas}
+            onChange={(e) => {
+              setIncludeArchivadas(e.target.checked);
+              refresh(fecha, e.target.checked);
+            }}
+          />
+          Incluir archivadas
+        </label>
       </div>
 
       {loading ? (
@@ -289,12 +332,34 @@ export function TomasSupervisorClient() {
                       </div>
                       <EstadoBadge estado={t.estado} />
                     </div>
-                    <Link
-                      href={`/tomador/area/${t.id}`}
-                      className="mt-3 inline-block text-sm font-medium text-blue-600"
-                    >
-                      Ver conteos →
-                    </Link>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <Link
+                        href={`/tomador/area/${t.id}`}
+                        className="text-sm font-medium text-blue-600"
+                      >
+                        Ver conteos →
+                      </Link>
+                      <a
+                        href={`/api/asignaciones/${t.id}/exportar`}
+                        className="text-sm font-medium text-green-700"
+                      >
+                        Descargar Excel
+                      </a>
+                      {!t.archivada ? (
+                        <button
+                          type="button"
+                          onClick={() => archivarToma(t.id)}
+                          disabled={archivandoId === t.id}
+                          className="text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                        >
+                          {archivandoId === t.id ? "Archivando…" : "Archivar"}
+                        </button>
+                      ) : (
+                        <span className="text-xs font-medium uppercase text-slate-400">
+                          Archivada
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -89,6 +89,7 @@ model AsignacionInventarioArea {
   creadoPorId   String
   fecha         DateTime               @db.Date
   estado        AsignacionEstado        @default(PENDIENTE)
+  archivada     Boolean                 @default(false)
   area          Area                   @relation(fields: [areaId], references: [id], onDelete: Cascade)
   usuario       User                   @relation("TomasAsignadas", fields: [usuarioId], references: [id])
   creadoPor     User                   @relation("TomasCreadas", fields: [creadoPorId], references: [id])
@@ -102,6 +103,7 @@ model AsignacionInventarioArea {
   @@index([fecha])
   @@index([estado])
   @@index([areaId])
+  @@index([archivada])
 }
 
 model ConteoInventario {

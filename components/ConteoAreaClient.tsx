@@ -62,6 +62,41 @@ export function ConteoAreaClient({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [completando, setCompletando] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  async function descargarExcel() {
+    setExportando(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/asignaciones/${asignacionId}/exportar`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof err.error === "string"
+            ? err.error
+            : "No se pudo generar el Excel del conteo"
+        );
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `conteo-${asignacionId}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMessage({ type: "ok", text: "Excel descargado correctamente" });
+    } catch (err) {
+      setMessage({
+        type: "err",
+        text: err instanceof Error ? err.message : "Error al descargar Excel",
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
 
   const procesarCodigo = useCallback(async (codigo: string) => {
     const trimmed = codigo.trim();
@@ -74,7 +109,24 @@ export function ConteoAreaClient({
       const res = await fetch(
         `/api/productos/buscar?codigo=${encodeURIComponent(trimmed)}`
       );
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg =
+          data && typeof data.error === "string"
+            ? data.error
+            : `No se pudo buscar el código (${res.status}). Reintenta o ingresa manualmente.`;
+        setMessage({ type: "err", text: msg });
+        return;
+      }
+
+      if (!data) {
+        setMessage({
+          type: "err",
+          text: "Respuesta inválida del servidor al buscar el producto.",
+        });
+        return;
+      }
 
       if (data.encontrado) {
         setPending({ type: "catalogado", producto: data.producto, codigo: trimmed });
@@ -86,8 +138,14 @@ export function ConteoAreaClient({
         setDescripcionLibre("");
         setShowScanner(false);
       }
-    } catch {
-      setMessage({ type: "err", text: "Error de conexión. Reintenta." });
+    } catch (err) {
+      setMessage({
+        type: "err",
+        text:
+          err instanceof Error
+            ? `Error al buscar: ${err.message}`
+            : "Error de conexión. Revisa tu internet e intenta de nuevo.",
+      });
     } finally {
       setLoading(false);
     }
@@ -289,6 +347,16 @@ export function ConteoAreaClient({
             {conteos.length}{" "}
             {conteos.length === 1 ? "producto registrado" : "productos registrados"}
           </p>
+          {(conteos.length > 0 || noCatalogados.length > 0 || estado === "COMPLETADA") && (
+            <button
+              type="button"
+              onClick={descargarExcel}
+              disabled={exportando}
+              className="mt-3 w-full rounded-lg border border-green-600 py-2.5 text-sm font-semibold text-green-700 active:bg-green-50 disabled:opacity-60"
+            >
+              {exportando ? "Generando Excel…" : "Descargar Excel del conteo"}
+            </button>
+          )}
         </div>
 
         {soloLectura && estado !== "COMPLETADA" && (

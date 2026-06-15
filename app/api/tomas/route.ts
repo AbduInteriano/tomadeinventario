@@ -17,12 +17,13 @@ export async function GET(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const fechaParam = request.nextUrl.searchParams.get("fecha");
+  const includeArchivadas = request.nextUrl.searchParams.get("archivadas") === "1";
   const fecha = parseFechaParam(fechaParam) ?? hoyUtc();
 
   const [tomas, puntos, fechas, usuarios] = await Promise.all([
-    listSupervisorTomorias(fecha),
+    listSupervisorTomorias(fecha, includeArchivadas),
     getAreasParaAsignar(),
-    listFechasConTomas(),
+    listFechasConTomas(includeArchivadas),
     prisma.user.findMany({
       where: { activo: true, role: { in: ["TOMADOR", "SUPERVISOR"] } },
       select: { id: true, nombre: true, role: true },
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     fecha: fechaToIsoDate(fecha),
+    includeArchivadas,
     fechas,
     tomas: tomas.map((t) => serializeTomaConteo(t, auth.session.user.id)),
     puntos,

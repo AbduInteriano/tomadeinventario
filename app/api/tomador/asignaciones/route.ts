@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
   const fecha = parseFechaParam(fechaParam) ?? hoyUtc();
 
   const tomas = isSupervisor
-    ? await listSupervisorTomorias(fecha)
-    : await listTomadorTomorias(session.user.id, fecha);
+    ? await listSupervisorTomorias(fecha, false)
+    : await listTomadorTomorias(session.user.id, fecha, false);
 
   return NextResponse.json({
     fecha: fechaToIsoDate(fecha),

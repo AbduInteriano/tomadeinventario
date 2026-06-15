@@ -12,6 +12,7 @@ const tomaSelectFields = {
   id: true,
   estado: true,
   fecha: true,
+  archivada: true,
   usuarioId: true,
   creadoPorId: true,
   usuario: { select: { id: true, nombre: true } },
@@ -215,32 +216,39 @@ export async function finalizarToma(asignacionId: string, userId: string) {
   return { toma: updated };
 }
 
-function buildFechaFilter(fecha?: Date) {
-  if (!fecha) return {};
-  return { fecha };
+function buildListWhere(fecha?: Date, includeArchivadas = false) {
+  return {
+    ...(fecha ? { fecha } : {}),
+    ...(!includeArchivadas ? { archivada: false } : {}),
+  };
 }
 
-export async function listTomadorTomorias(userId: string, fecha?: Date) {
+export async function listTomadorTomorias(
+  userId: string,
+  fecha?: Date,
+  includeArchivadas = false
+) {
   return prisma.asignacionInventarioArea.findMany({
     where: {
       usuarioId: userId,
-      ...buildFechaFilter(fecha),
+      ...buildListWhere(fecha, includeArchivadas),
     },
     select: tomaSelectFields,
     orderBy: [{ estado: "asc" }, { updatedAt: "desc" }],
   });
 }
 
-export async function listSupervisorTomorias(fecha?: Date) {
+export async function listSupervisorTomorias(fecha?: Date, includeArchivadas = false) {
   return prisma.asignacionInventarioArea.findMany({
-    where: buildFechaFilter(fecha),
+    where: buildListWhere(fecha, includeArchivadas),
     select: tomaSelectFields,
     orderBy: [{ fecha: "desc" }, { updatedAt: "desc" }],
   });
 }
 
-export async function listFechasConTomas() {
+export async function listFechasConTomas(includeArchivadas = false) {
   const rows = await prisma.asignacionInventarioArea.findMany({
+    where: includeArchivadas ? {} : { archivada: false },
     select: { fecha: true },
     distinct: ["fecha"],
     orderBy: { fecha: "desc" },
@@ -249,11 +257,37 @@ export async function listFechasConTomas() {
   return rows.map((r) => fechaToIsoDate(r.fecha));
 }
 
+export async function archivarToma(asignacionId: string) {
+  const asignacion = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: asignacionId },
+  });
+
+  if (!asignacion) {
+    return { error: "Toma no encontrada", status: 404 as const };
+  }
+
+  if (asignacion.estado !== AsignacionEstado.COMPLETADA) {
+    return { error: "Solo se pueden archivar tomas finalizadas", status: 400 as const };
+  }
+
+  if (asignacion.archivada) {
+    return { error: "Esta toma ya está archivada", status: 400 as const };
+  }
+
+  const updated = await prisma.asignacionInventarioArea.update({
+    where: { id: asignacionId },
+    data: { archivada: true },
+  });
+
+  return { toma: updated };
+}
+
 export function serializeTomaConteo(
   toma: {
     id: string;
     estado: AsignacionEstado;
     fecha: Date;
+    archivada: boolean;
     usuarioId: string;
     usuario: { id: string; nombre: string };
     area: {
@@ -269,6 +303,7 @@ export function serializeTomaConteo(
     id: toma.id,
     estado: toma.estado,
     fecha: fechaToIsoDate(toma.fecha),
+    archivada: toma.archivada,
     usuarioId: toma.usuarioId,
     usuarioNombre: toma.usuario.nombre,
     esPropia: toma.usuarioId === viewerUserId,
