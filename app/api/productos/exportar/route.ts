@@ -17,7 +17,7 @@ export async function GET() {
   const buffer = await createProductosExportBuffer(
     productos.map((p) => ({
       codigoBarras: p.codigoBarras,
-      codigoInterno: p.codigoInterno,
+      codigoArticulo: p.codigoArticulo,
       descripcion: p.descripcion,
       unidadMedida: p.unidadMedida.abreviatura,
       categoria: p.categoria?.nombre ?? null,

@@ -3,7 +3,7 @@ import { decimalToNumber } from "@/lib/inventario";
 
 export const CONTEO_EXCEL_HEADERS = [
   "Código de barras",
-  "Código interno",
+  "Código artículo",
   "Descripción",
   "Unidad",
   "Cantidad contada",
@@ -17,7 +17,7 @@ export const NO_CATALOGADO_EXCEL_HEADERS = [
 
 export interface ConteoExportRow {
   codigoBarras: string;
-  codigoInterno: string | null;
+  codigoArticulo: string | null;
   descripcion: string;
   unidadMedida: string;
   cantidadContada: { toNumber(): number } | number;
@@ -49,7 +49,7 @@ function addConteoRows(sheet: ExcelJS.Worksheet, conteos: ConteoExportRow[]) {
   for (const c of conteos) {
     sheet.addRow([
       c.codigoBarras,
-      c.codigoInterno ?? "",
+      c.codigoArticulo ?? "",
       c.descripcion,
       c.unidadMedida,
       decimalToNumber(c.cantidadContada),
@@ -114,6 +114,11 @@ export async function createConsolidatedConteoExportBuffer(
   if (nonEmpty.length === 0) {
     addHeaderRow(sheet);
     addNoCatalogadoHeader(noCatSheet);
+    if (blocks.length === 1) {
+      const titleRow = sheet.addRow([blocks[0].label]);
+      titleRow.font = { bold: true, size: 12 };
+      sheet.mergeCells(titleRow.number, 1, titleRow.number, CONTEO_EXCEL_HEADERS.length);
+    }
   } else {
     nonEmpty.forEach((block, index) => {
       if (index === 0) {

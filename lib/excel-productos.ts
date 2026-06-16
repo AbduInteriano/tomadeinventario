@@ -19,7 +19,7 @@ export async function createProductoTemplateBuffer(): Promise<Buffer> {
 export async function createProductosExportBuffer(
   productos: {
     codigoBarras: string;
-    codigoInterno: string | null;
+    codigoArticulo: string | null;
     descripcion: string;
     unidadMedida: string;
     categoria: string | null;
@@ -34,7 +34,7 @@ export async function createProductosExportBuffer(
   for (const p of productos) {
     sheet.addRow([
       p.codigoBarras,
-      p.codigoInterno ?? "",
+      p.codigoArticulo ?? "",
       p.descripcion,
       p.unidadMedida,
       p.categoria ?? "",

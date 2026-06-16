@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   const asignaciones = await prisma.asignacionInventarioArea.findMany({
-    where: { id: { in: ids }, archivada: false },
+    where: { id: { in: ids } },
     include: {
       area: { include: { punto: true } },
       usuario: { select: { nombre: true } },
@@ -63,13 +63,14 @@ export async function POST(request: NextRequest) {
   });
 
   if (asignaciones.length === 0) {
-    return NextResponse.json({ error: "No hay tomas válidas para exportar" }, { status: 404 });
+    return NextResponse.json({ error: "No se encontraron las tomas seleccionadas" }, { status: 404 });
   }
 
   const orderMap = new Map(ids.map((id, i) => [id, i]));
   asignaciones.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
-  const blocks = asignaciones.map((a) => ({
+  try {
+    const blocks = asignaciones.map((a) => ({
     label: buildConteoBlockLabel({
       punto: a.area.punto.nombre,
       area: a.area.nombre,
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     }),
     conteos: a.conteos.map((c) => ({
       codigoBarras: c.producto.codigoBarras,
-      codigoInterno: c.producto.codigoInterno,
+      codigoArticulo: c.producto.codigoArticulo,
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
@@ -98,11 +99,18 @@ export async function POST(request: NextRequest) {
 
   const buffer = await createConsolidatedConteoExportBuffer(blocks);
 
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  } catch (err) {
+    console.error("[conteos/exportar]", err);
+    return NextResponse.json(
+      { error: "No se pudo generar el Excel del conteo" },
+      { status: 500 }
+    );
+  }
 }

@@ -28,21 +28,21 @@ const CATEGORIAS_INICIALES = ["Limpieza", "Papel", "EPP"];
 const PRODUCTOS_DEMO = [
   {
     codigoBarras: "7501234567890",
-    codigoInterno: "PROD-001",
+    codigoArticulo: "PROD-001",
     descripcion: "Detergente líquido 1L",
     unidad: "UN",
     categoria: "Limpieza",
   },
   {
     codigoBarras: "7501234567891",
-    codigoInterno: "PROD-002",
+    codigoArticulo: "PROD-002",
     descripcion: "Papel higiénico paquete 4 rollos",
     unidad: "PQ",
     categoria: "Papel",
   },
   {
     codigoBarras: "7501234567892",
-    codigoInterno: "PROD-003",
+    codigoArticulo: "PROD-003",
     descripcion: "Guantes de nitrilo caja",
     unidad: "CJ",
     categoria: "EPP",
@@ -127,7 +127,7 @@ async function main() {
       },
       create: {
         codigoBarras: producto.codigoBarras,
-        codigoInterno: producto.codigoInterno,
+        codigoArticulo: producto.codigoArticulo,
         descripcion: producto.descripcion,
         unidadMedidaId: unidad!.id,
         categoriaId: categoria!.id,

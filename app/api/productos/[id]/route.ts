@@ -52,10 +52,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const validated = validateProductoInput(
     {
       codigoBarras: (body.codigoBarras as string) ?? producto.codigoBarras,
-      codigoInterno:
-        body.codigoInterno !== undefined
-          ? (body.codigoInterno as string | null)
-          : producto.codigoInterno,
+      codigoArticulo:
+        body.codigoArticulo !== undefined
+          ? (body.codigoArticulo as string | null)
+          : producto.codigoArticulo,
       descripcion: (body.descripcion as string) ?? producto.descripcion,
       unidadMedidaId: unidad.id,
       categoriaId: categoria.id,
@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     where: { id: params.id },
     data: {
       codigoBarras: data.codigoBarras,
-      codigoInterno: data.codigoInterno,
+      codigoArticulo: data.codigoArticulo,
       descripcion: data.descripcion,
       unidadMedidaId: data.unidadMedidaId,
       categoriaId: data.categoriaId,

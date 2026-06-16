@@ -54,7 +54,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     .replace(/\s+/g, "-")
     .slice(0, 60);
 
-  const buffer = await createConteoExportBuffer({
+  try {
+    const buffer = await createConteoExportBuffer({
     label: buildConteoBlockLabel({
       punto: asignacion.area.punto.nombre,
       area: asignacion.area.nombre,
@@ -63,7 +64,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }),
     conteos: asignacion.conteos.map((c) => ({
       codigoBarras: c.producto.codigoBarras,
-      codigoInterno: c.producto.codigoInterno,
+      codigoArticulo: c.producto.codigoArticulo,
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
@@ -73,13 +74,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       descripcionLibre: n.descripcionLibre,
       cantidad: n.cantidad,
     })),
-  });
+    });
 
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="conteo-${safeName}-${fechaStr}.xlsx"`,
-    },
-  });
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="conteo-${safeName}-${fechaStr}.xlsx"`,
+      },
+    });
+  } catch (err) {
+    console.error("[asignaciones/exportar]", err);
+    return NextResponse.json(
+      { error: "No se pudo generar el Excel del conteo" },
+      { status: 500 }
+    );
+  }
 }

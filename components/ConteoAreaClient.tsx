@@ -7,7 +7,7 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 interface ProductoEncontrado {
   id: string;
   codigoBarras: string;
-  codigoInterno: string | null;
+  codigoArticulo: string | null;
   descripcion: string;
   unidadMedida: string;
 }

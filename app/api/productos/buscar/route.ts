@@ -15,16 +15,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Código requerido" }, { status: 400 });
   }
 
-  const producto = await prisma.producto.findFirst({
+  const byBarras = await prisma.producto.findFirst({
     where: {
       activo: true,
-      OR: [
-        { codigoBarras: { equals: codigo, mode: "insensitive" } },
-        { codigoInterno: { equals: codigo, mode: "insensitive" } },
-      ],
+      codigoBarras: { equals: codigo, mode: "insensitive" },
     },
     select: productoSelect,
   });
+
+  const producto =
+    byBarras ??
+    (await prisma.producto.findFirst({
+      where: {
+        activo: true,
+        codigoArticulo: { equals: codigo, mode: "insensitive" },
+      },
+      select: productoSelect,
+    }));
 
   if (!producto) {
     return NextResponse.json({ encontrado: false });
@@ -37,7 +44,7 @@ export async function GET(request: NextRequest) {
     producto: {
       id: serialized.id,
       codigoBarras: serialized.codigoBarras,
-      codigoInterno: serialized.codigoInterno,
+      codigoArticulo: serialized.codigoArticulo,
       descripcion: serialized.descripcion,
       unidadMedida: serialized.unidadMedida,
       categoria: serialized.categoria,

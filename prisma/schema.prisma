@@ -90,7 +90,7 @@ model Area {
 model Producto {
   id              String             @id @default(cuid())
   codigoBarras    String             @unique
-  codigoInterno   String?
+  codigoArticulo   String?
   descripcion     String
   unidadMedidaId  String
   unidadMedida    UnidadMedida       @relation(fields: [unidadMedidaId], references: [id])
@@ -103,7 +103,7 @@ model Producto {
   updatedAt       DateTime           @updatedAt
 
   @@index([codigoBarras])
-  @@index([codigoInterno])
+  @@index([codigoArticulo])
   @@index([activo])
   @@index([categoriaId])
   @@index([unidadMedidaId])

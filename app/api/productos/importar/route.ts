@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     const validated = validateProductoInput({
       codigoBarras: cellToString(row[0]),
-      codigoInterno: cellToString(row[1]) || null,
+      codigoArticulo: cellToString(row[1]) || null,
       descripcion: cellToString(row[2]),
       unidadMedidaId: unidad.id,
       categoriaId,
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
           where: { id: existing.id },
           data: {
             codigoBarras: data.codigoBarras,
-            codigoInterno: data.codigoInterno,
+            codigoArticulo: data.codigoArticulo,
             descripcion: data.descripcion,
             unidadMedidaId: data.unidadMedidaId,
             categoriaId: data.categoriaId,
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         await prisma.producto.create({
           data: {
             codigoBarras: data.codigoBarras,
-            codigoInterno: data.codigoInterno,
+            codigoArticulo: data.codigoArticulo,
             descripcion: data.descripcion,
             unidadMedidaId: data.unidadMedidaId,
             categoriaId: data.categoriaId,

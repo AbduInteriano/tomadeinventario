@@ -4,7 +4,7 @@ import { productoInclude } from "@/lib/catalogo";
 
 export const EXCEL_HEADERS = [
   "Código Barras",
-  "Código Interno",
+  "Código Artículo",
   "Descripción",
   "Unidad",
   "Categoría",
@@ -12,7 +12,7 @@ export const EXCEL_HEADERS = [
 
 export interface ProductoInput {
   codigoBarras: string;
-  codigoInterno?: string | null;
+  codigoArticulo?: string | null;
   descripcion: string;
   unidadMedidaId: string;
   categoriaId?: string | null;
@@ -21,7 +21,7 @@ export interface ProductoInput {
 export interface ProductoResponse {
   id: string;
   codigoBarras: string;
-  codigoInterno: string | null;
+  codigoArticulo: string | null;
   descripcion: string;
   unidadMedida: string;
   unidadMedidaId: string;
@@ -33,7 +33,7 @@ export interface ProductoResponse {
 type ProductoWithRelations = {
   id: string;
   codigoBarras: string;
-  codigoInterno: string | null;
+  codigoArticulo: string | null;
   descripcion: string;
   unidadMedida: { id: string; nombre: string; abreviatura: string };
   categoria: { id: string; nombre: string } | null;
@@ -43,7 +43,7 @@ export function serializeProducto(p: ProductoWithRelations): ProductoResponse {
   return {
     id: p.id,
     codigoBarras: p.codigoBarras,
-    codigoInterno: p.codigoInterno,
+    codigoArticulo: p.codigoArticulo,
     descripcion: p.descripcion,
     unidadMedida: p.unidadMedida.abreviatura,
     unidadMedidaId: p.unidadMedida.id,
@@ -56,7 +56,7 @@ export function serializeProducto(p: ProductoWithRelations): ProductoResponse {
 export const productoSelect = {
   id: true,
   codigoBarras: true,
-  codigoInterno: true,
+  codigoArticulo: true,
   descripcion: true,
   activo: true,
   ...productoInclude,
@@ -94,13 +94,13 @@ export function validateProductoInput(
     return { error: "La unidad de medida es obligatoria" };
   }
 
-  const codigoInterno = input.codigoInterno?.trim() || null;
+  const codigoArticulo = input.codigoArticulo?.trim() || null;
   const categoriaId = input.categoriaId?.trim() || null;
 
   return {
     data: {
       codigoBarras,
-      codigoInterno,
+      codigoArticulo,
       descripcion,
       unidadMedidaId,
       categoriaId,
@@ -135,7 +135,7 @@ export function buildProductoSearchWhere(q: string) {
     activo: true,
     OR: [
       { codigoBarras: { contains: term, mode: "insensitive" as const } },
-      { codigoInterno: { contains: term, mode: "insensitive" as const } },
+      { codigoArticulo: { contains: term, mode: "insensitive" as const } },
       { descripcion: { contains: term, mode: "insensitive" as const } },
     ],
   };
@@ -144,7 +144,7 @@ export function buildProductoSearchWhere(q: string) {
 export function productoDataChanged(
   existing: {
     codigoBarras: string;
-    codigoInterno: string | null;
+    codigoArticulo: string | null;
     descripcion: string;
     unidadMedidaId: string;
     categoriaId: string | null;
@@ -154,7 +154,7 @@ export function productoDataChanged(
 ): boolean {
   return (
     existing.codigoBarras.toLowerCase() !== data.codigoBarras.toLowerCase() ||
-    (existing.codigoInterno ?? "") !== (data.codigoInterno ?? "") ||
+    (existing.codigoArticulo ?? "") !== (data.codigoArticulo ?? "") ||
     existing.descripcion !== data.descripcion ||
     existing.unidadMedidaId !== data.unidadMedidaId ||
     (existing.categoriaId ?? "") !== (data.categoriaId ?? "") ||
@@ -205,7 +205,7 @@ export async function previewImportRows(rows: unknown[][]) {
 
     const validated = validateProductoInput({
       codigoBarras: cellToString(row[0]),
-      codigoInterno: cellToString(row[1]) || null,
+      codigoArticulo: cellToString(row[1]) || null,
       descripcion: cellToString(row[2]),
       unidadMedidaId: unidad.id,
       categoriaId,
@@ -244,9 +244,15 @@ export function normalizeExcelHeader(value: unknown): string {
 
 export function validateExcelHeaders(row: unknown[]): boolean {
   if (row.length < EXCEL_HEADERS.length) return false;
-  return EXCEL_HEADERS.every(
-    (expected, i) => normalizeExcelHeader(row[i]) === normalizeExcelHeader(expected)
-  );
+  const col1 = normalizeExcelHeader(row[1]);
+  const col1Ok =
+    col1 === normalizeExcelHeader("Código Artículo") ||
+    col1 === normalizeExcelHeader("Código Interno");
+  if (!col1Ok) return false;
+  return EXCEL_HEADERS.every((expected, i) => {
+    if (i === 1) return true;
+    return normalizeExcelHeader(row[i]) === normalizeExcelHeader(expected);
+  });
 }
 
 export function cellToString(value: unknown): string {
