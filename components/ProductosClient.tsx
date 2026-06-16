@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FlashMessage } from "@/components/FlashMessage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CollapsibleList } from "@/components/CollapsibleList";
 
 export interface ProductoItem {
   id: string;
@@ -259,7 +260,7 @@ export function ProductosClient() {
 
   function renderProductoItem(p: ProductoItem) {
     return (
-      <li key={p.id} className="border-b border-slate-100 px-3 py-2.5 last:border-b-0">
+      <>
         <p className="font-medium text-slate-900">{p.descripcion}</p>
         <p className="font-mono text-xs text-slate-500">{p.codigoBarras}</p>
         <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
@@ -283,7 +284,7 @@ export function ProductosClient() {
             Eliminar
           </button>
         </div>
-      </li>
+      </>
     );
   }
 
@@ -434,9 +435,13 @@ export function ProductosClient() {
               {pagination.total} producto{pagination.total === 1 ? "" : "s"} en total
             </p>
           )}
-          <ul className="divide-y divide-slate-100 rounded-xl bg-white ring-1 ring-slate-200">
-            {productos.map(renderProductoItem)}
-          </ul>
+          <CollapsibleList
+            items={productos}
+            getKey={(p) => p.id}
+            forceExpanded={!!debouncedQ.trim()}
+            itemClassName="px-3 py-2.5"
+            renderItem={renderProductoItem}
+          />
           {pagination.totalPages > 1 && (
             <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
               <button

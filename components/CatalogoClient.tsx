@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FlashMessage } from "@/components/FlashMessage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CollapsibleList } from "@/components/CollapsibleList";
 
 interface CategoriaItem {
   id: string;
@@ -295,86 +296,88 @@ export function CatalogoClient() {
         {categorias.length === 0 ? (
           <p className="mt-4 text-sm text-slate-500">No hay categorías registradas.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-slate-100">
-            {categorias.map((c) => (
-              <li key={c.id} className="py-3">
-                {editCategoriaId === c.id ? (
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      value={editCategoriaNombre}
-                      onChange={(e) => setEditCategoriaNombre(e.target.value)}
-                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-base"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => guardarCategoria(c.id)}
-                      disabled={saving}
-                      className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
+          <CollapsibleList
+            items={categorias}
+            getKey={(c) => c.id}
+            forceExpanded={!!editCategoriaId}
+            className="mt-4 shadow-none ring-0"
+            itemClassName="py-3"
+            renderItem={(c) =>
+              editCategoriaId === c.id ? (
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={editCategoriaNombre}
+                    onChange={(e) => setEditCategoriaNombre(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-base"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => guardarCategoria(c.id)}
+                    disabled={saving}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditCategoriaId(null)}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p
+                      className={`font-medium ${c.activo ? "text-slate-900" : "text-slate-400"}`}
                     >
-                      Guardar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditCategoriaId(null)}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      Cancelar
-                    </button>
+                      {c.nombre}
+                      {!c.activo && (
+                        <span className="ml-2 text-xs font-normal uppercase">Inactiva</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {c.productosCount} {c.productosCount === 1 ? "producto" : "productos"}
+                    </p>
                   </div>
-                ) : (
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p
-                        className={`font-medium ${c.activo ? "text-slate-900" : "text-slate-400"}`}
-                      >
-                        {c.nombre}
-                        {!c.activo && (
-                          <span className="ml-2 text-xs font-normal uppercase">Inactiva</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {c.productosCount}{" "}
-                        {c.productosCount === 1 ? "producto" : "productos"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      {c.activo ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditCategoriaId(c.id);
-                              setEditCategoriaNombre(c.nombre);
-                            }}
-                            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget({ type: "categoria", item: c })}
-                            disabled={c.productosCount > 0}
-                            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            Eliminar
-                          </button>
-                        </>
-                      ) : (
+                  <div className="flex shrink-0 gap-1">
+                    {c.activo ? (
+                      <>
                         <button
                           type="button"
-                          onClick={() => reactivarCategoria(c.id)}
-                          disabled={saving}
-                          className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700"
+                          onClick={() => {
+                            setEditCategoriaId(c.id);
+                            setEditCategoriaNombre(c.nombre);
+                          }}
+                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
                         >
-                          Reactivar
+                          Editar
                         </button>
-                      )}
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget({ type: "categoria", item: c })}
+                          disabled={c.productosCount > 0}
+                          className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => reactivarCategoria(c.id)}
+                        disabled={saving}
+                        className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700"
+                      >
+                        Reactivar
+                      </button>
+                    )}
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                </div>
+              )
+            }
+          />
         )}
       </section>
 
@@ -413,112 +416,114 @@ export function CatalogoClient() {
         {unidades.length === 0 ? (
           <p className="mt-4 text-sm text-slate-500">No hay unidades registradas.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-slate-100">
-            {unidades.map((u) => (
-              <li key={u.id} className="py-3">
-                {editUnidadId === u.id ? (
-                  <div className="space-y-2">
-                    <input
-                      value={editUnidadForm.nombre}
-                      onChange={(e) =>
-                        setEditUnidadForm({ ...editUnidadForm, nombre: e.target.value })
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-base"
-                      placeholder="Nombre"
-                    />
-                    <input
-                      value={editUnidadForm.abreviatura}
-                      onChange={(e) =>
-                        setEditUnidadForm({
-                          ...editUnidadForm,
-                          abreviatura: e.target.value.toUpperCase(),
-                        })
-                      }
-                      disabled={u.productosCount > 0}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-base uppercase disabled:bg-slate-50"
-                      placeholder="Abreviatura"
-                    />
-                    {u.productosCount > 0 && (
-                      <p className="text-xs text-amber-700">
-                        La abreviatura no se puede cambiar: {u.productosCount} producto(s) la usan.
-                      </p>
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => guardarUnidad(u.id)}
-                        disabled={saving}
-                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditUnidadId(null)}
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
+          <CollapsibleList
+            items={unidades}
+            getKey={(u) => u.id}
+            forceExpanded={!!editUnidadId}
+            className="mt-4 shadow-none ring-0"
+            itemClassName="py-3"
+            renderItem={(u) =>
+              editUnidadId === u.id ? (
+                <div className="space-y-2">
+                  <input
+                    value={editUnidadForm.nombre}
+                    onChange={(e) =>
+                      setEditUnidadForm({ ...editUnidadForm, nombre: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-base"
+                    placeholder="Nombre"
+                  />
+                  <input
+                    value={editUnidadForm.abreviatura}
+                    onChange={(e) =>
+                      setEditUnidadForm({
+                        ...editUnidadForm,
+                        abreviatura: e.target.value.toUpperCase(),
+                      })
+                    }
+                    disabled={u.productosCount > 0}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-base uppercase disabled:bg-slate-50"
+                    placeholder="Abreviatura"
+                  />
+                  {u.productosCount > 0 && (
+                    <p className="text-xs text-amber-700">
+                      La abreviatura no se puede cambiar: {u.productosCount} producto(s) la usan.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => guardarUnidad(u.id)}
+                      disabled={saving}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditUnidadId(null)}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      Cancelar
+                    </button>
                   </div>
-                ) : (
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p
-                        className={`font-medium ${u.activo ? "text-slate-900" : "text-slate-400"}`}
-                      >
-                        {u.nombre}{" "}
-                        <span className="font-mono text-sm text-slate-500">({u.abreviatura})</span>
-                        {!u.activo && (
-                          <span className="ml-2 text-xs font-normal uppercase">Inactiva</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {u.productosCount}{" "}
-                        {u.productosCount === 1 ? "producto" : "productos"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      {u.activo ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditUnidadId(u.id);
-                              setEditUnidadForm({
-                                nombre: u.nombre,
-                                abreviatura: u.abreviatura,
-                              });
-                            }}
-                            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget({ type: "unidad", item: u })}
-                            disabled={u.productosCount > 0}
-                            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-40"
-                          >
-                            Eliminar
-                          </button>
-                        </>
-                      ) : (
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p
+                      className={`font-medium ${u.activo ? "text-slate-900" : "text-slate-400"}`}
+                    >
+                      {u.nombre}{" "}
+                      <span className="font-mono text-sm text-slate-500">({u.abreviatura})</span>
+                      {!u.activo && (
+                        <span className="ml-2 text-xs font-normal uppercase">Inactiva</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {u.productosCount} {u.productosCount === 1 ? "producto" : "productos"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    {u.activo ? (
+                      <>
                         <button
                           type="button"
-                          onClick={() => reactivarUnidad(u.id)}
-                          disabled={saving}
-                          className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700"
+                          onClick={() => {
+                            setEditUnidadId(u.id);
+                            setEditUnidadForm({
+                              nombre: u.nombre,
+                              abreviatura: u.abreviatura,
+                            });
+                          }}
+                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
                         >
-                          Reactivar
+                          Editar
                         </button>
-                      )}
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget({ type: "unidad", item: u })}
+                          disabled={u.productosCount > 0}
+                          className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-40"
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => reactivarUnidad(u.id)}
+                        disabled={saving}
+                        className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700"
+                      >
+                        Reactivar
+                      </button>
+                    )}
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                </div>
+              )
+            }
+          />
         )}
       </section>
 
