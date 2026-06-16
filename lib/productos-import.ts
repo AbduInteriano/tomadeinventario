@@ -297,7 +297,7 @@ export async function executeProductoImport(
   const existingMap = await loadExistingByBarcodes(
     validRows.map((r) => r.codigoBarras)
   );
-  const { creados, modificados, sinCambios, toCreate, toUpdate } = classifyRows(
+  const { creados: _creados, modificados: _modificados, sinCambios, toCreate, toUpdate } = classifyRows(
     validRows,
     existingMap
   );
