@@ -78,20 +78,12 @@ export async function POST(request: NextRequest) {
         throw new Error("PRODUCTO");
       }
 
-      return tx.conteoInventario.upsert({
-        where: {
-          asignacionId_productoId: { asignacionId, productoId },
-        },
-        create: {
+      return tx.conteoInventario.create({
+        data: {
           asignacionId,
           productoId,
           cantidadContada: cantidadDecimal,
           usuarioId: session.user.id,
-        },
-        update: {
-          cantidadContada: { increment: cantidadDecimal },
-          usuarioId: session.user.id,
-          timestamp: new Date(),
         },
         select: {
           id: true,
@@ -144,6 +136,7 @@ export async function POST(request: NextRequest) {
     if (code === "PRODUCTO") {
       return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
     }
-    throw err;
+    console.error("[conteos POST]", err);
+    return NextResponse.json({ error: "Error al guardar el conteo" }, { status: 500 });
   }
 }

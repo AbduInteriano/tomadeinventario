@@ -2,8 +2,7 @@ import { AsignacionEstado, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   ESTADOS_TOMA_ABIERTA,
-  findTomaActivaEnArea,
-  hoyUtc,
+  hoyApp,
   parseFechaParam,
   fechaToIsoDate,
 } from "@/lib/inventario";
@@ -25,6 +24,31 @@ const tomaSelectFields = {
   },
   _count: { select: { conteos: true } },
 } as const;
+
+async function liberarTomaPendienteVacia(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  activa: {
+    id: string;
+    estado: AsignacionEstado;
+    fecha: Date;
+    _count: { conteos: number; noCatalogados: number };
+  },
+  nuevaFecha: Date
+): Promise<boolean> {
+  const registros = activa._count.conteos + activa._count.noCatalogados;
+  if (
+    activa.estado === AsignacionEstado.PENDIENTE &&
+    registros === 0 &&
+    activa.fecha.getTime() < nuevaFecha.getTime()
+  ) {
+    await tx.asignacionInventarioArea.update({
+      where: { id: activa.id },
+      data: { estado: AsignacionEstado.COMPLETADA },
+    });
+    return true;
+  }
+  return false;
+}
 
 export async function canViewAsignacion(
   asignacionId: string,
@@ -61,7 +85,7 @@ export async function crearTomas(params: {
   creadoPorId: string;
   fecha?: Date;
 }) {
-  const fecha = params.fecha ?? hoyUtc();
+  const fecha = params.fecha ?? hoyApp();
 
   if (params.areaIds.length === 0) {
     return { error: "Selecciona al menos un área" };
@@ -92,34 +116,65 @@ export async function crearTomas(params: {
   const omitidas: string[] = [];
 
   for (const area of areas) {
-    const activa = await findTomaActivaEnArea(area.id);
-    if (activa) {
-      omitidas.push(`${area.punto.nombre} · ${area.nombre}`);
-      continue;
-    }
+    try {
+      const tomaId = await prisma.$transaction(async (tx) => {
+        const activa = await tx.asignacionInventarioArea.findFirst({
+          where: {
+            areaId: area.id,
+            estado: { in: ESTADOS_TOMA_ABIERTA },
+            archivada: false,
+          },
+          include: {
+            _count: { select: { conteos: true, noCatalogados: true } },
+          },
+        });
 
-    const toma = await prisma.asignacionInventarioArea.create({
-      data: {
-        areaId: area.id,
-        usuarioId: params.usuarioId,
-        creadoPorId: params.creadoPorId,
-        fecha,
-        estado: AsignacionEstado.PENDIENTE,
-      },
-    });
-    creadas.push(toma.id);
+        if (activa) {
+          const liberada = await liberarTomaPendienteVacia(tx, activa, fecha);
+          if (!liberada) {
+            const fechaBloqueo = fechaToIsoDate(activa.fecha);
+            throw new Error(
+              `BLOQUEADA:${fechaBloqueo}:${activa.estado}`
+            );
+          }
+        }
+
+        const toma = await tx.asignacionInventarioArea.create({
+          data: {
+            areaId: area.id,
+            usuarioId: params.usuarioId,
+            creadoPorId: params.creadoPorId,
+            fecha,
+            estado: AsignacionEstado.PENDIENTE,
+          },
+        });
+        return toma.id;
+      });
+      creadas.push(tomaId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("BLOQUEADA:")) {
+        const [, fechaBloqueo, estado] = msg.split(":");
+        omitidas.push(
+          `${area.punto.nombre} · ${area.nombre} (toma ${estado} del ${fechaBloqueo})`
+        );
+      } else {
+        throw err;
+      }
+    }
   }
 
   if (creadas.length === 0) {
     return {
-      error: "Ninguna área disponible. Ya tienen una toma activa.",
+      error:
+        "Ninguna área disponible. Finaliza o archiva las tomas activas antes de crear nuevas.",
       omitidas,
     };
   }
 
   if (omitidas.length > 0) {
     warnings.push(
-      `${omitidas.length} área(s) omitida(s) por tener toma activa: ${omitidas.join(", ")}`
+      `${omitidas.length} área(s) omitida(s): ${omitidas.join("; ")}`
     );
   }
 
@@ -154,12 +209,23 @@ export async function iniciarToma(asignacionId: string, userId: string, isSuperv
     return { error: "Solo el tomador asignado puede iniciar esta toma", status: 403 as const };
   }
 
-  const updated = await prisma.asignacionInventarioArea.update({
-    where: { id: asignacionId },
+  const result = await prisma.asignacionInventarioArea.updateMany({
+    where: {
+      id: asignacionId,
+      estado: { in: [AsignacionEstado.PENDIENTE, AsignacionEstado.PAUSADA] },
+    },
     data: { estado: AsignacionEstado.EN_PROGRESO },
   });
 
-  return { toma: updated };
+  if (result.count === 0) {
+    return { error: "No se pudo iniciar la toma (estado cambió)", status: 409 as const };
+  }
+
+  const updated = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: asignacionId },
+  });
+
+  return { toma: updated! };
 }
 
 export async function pausarToma(asignacionId: string, userId: string) {
@@ -175,16 +241,24 @@ export async function pausarToma(asignacionId: string, userId: string) {
     return { error: "No tienes acceso a esta toma", status: 403 as const };
   }
 
-  if (asignacion.estado !== AsignacionEstado.EN_PROGRESO) {
-    return { error: "Solo puedes pausar tomas en progreso", status: 400 as const };
-  }
-
-  const updated = await prisma.asignacionInventarioArea.update({
-    where: { id: asignacionId },
+  const result = await prisma.asignacionInventarioArea.updateMany({
+    where: {
+      id: asignacionId,
+      estado: AsignacionEstado.EN_PROGRESO,
+      usuarioId: userId,
+    },
     data: { estado: AsignacionEstado.PAUSADA },
   });
 
-  return { toma: updated };
+  if (result.count === 0) {
+    return { error: "Solo puedes pausar tomas en progreso", status: 400 as const };
+  }
+
+  const updated = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: asignacionId },
+  });
+
+  return { toma: updated! };
 }
 
 export async function finalizarToma(asignacionId: string, userId: string) {
@@ -200,20 +274,30 @@ export async function finalizarToma(asignacionId: string, userId: string) {
     return { error: "No tienes acceso a esta toma", status: 403 as const };
   }
 
-  if (
-    asignacion.estado !== AsignacionEstado.EN_PROGRESO &&
-    asignacion.estado !== AsignacionEstado.PAUSADA &&
-    asignacion.estado !== AsignacionEstado.PENDIENTE
-  ) {
-    return { error: "Esta toma ya fue finalizada", status: 400 as const };
-  }
-
-  const updated = await prisma.asignacionInventarioArea.update({
-    where: { id: asignacionId },
+  const result = await prisma.asignacionInventarioArea.updateMany({
+    where: {
+      id: asignacionId,
+      estado: { in: [AsignacionEstado.EN_PROGRESO, AsignacionEstado.PAUSADA] },
+      usuarioId: userId,
+    },
     data: { estado: AsignacionEstado.COMPLETADA },
   });
 
-  return { toma: updated };
+  if (result.count === 0) {
+    if (asignacion.estado === AsignacionEstado.PENDIENTE) {
+      return {
+        error: "Debes iniciar la toma antes de finalizarla",
+        status: 400 as const,
+      };
+    }
+    return { error: "Esta toma ya fue finalizada", status: 400 as const };
+  }
+
+  const updated = await prisma.asignacionInventarioArea.findUnique({
+    where: { id: asignacionId },
+  });
+
+  return { toma: updated! };
 }
 
 function buildListWhere(fecha?: Date, includeArchivadas = false) {
@@ -329,14 +413,25 @@ export async function getAreasParaAsignar() {
   });
 
   const activas = await prisma.asignacionInventarioArea.findMany({
-    where: { estado: { in: ESTADOS_TOMA_ABIERTA } },
-    select: { areaId: true },
+    where: { estado: { in: ESTADOS_TOMA_ABIERTA }, archivada: false },
+    select: { areaId: true, fecha: true, estado: true },
   });
-  const ocupadas = new Set(activas.map((t) => t.areaId));
+  const ocupadas = new Map(
+    activas.map((t) => [t.areaId, { fecha: fechaToIsoDate(t.fecha), estado: t.estado }])
+  );
 
   const puntosMap = new Map<
     string,
-    { id: string; nombre: string; areas: { id: string; nombre: string; disponible: boolean }[] }
+    {
+      id: string;
+      nombre: string;
+      areas: {
+        id: string;
+        nombre: string;
+        disponible: boolean;
+        bloqueo?: { fecha: string; estado: string };
+      }[];
+    }
   >();
 
   for (const a of areas) {
@@ -347,14 +442,16 @@ export async function getAreasParaAsignar() {
         areas: [],
       });
     }
+    const bloqueo = ocupadas.get(a.id);
     puntosMap.get(a.punto.id)!.areas.push({
       id: a.id,
       nombre: a.nombre,
-      disponible: !ocupadas.has(a.id),
+      disponible: !bloqueo,
+      ...(bloqueo ? { bloqueo } : {}),
     });
   }
 
   return Array.from(puntosMap.values());
 }
 
-export { parseFechaParam, hoyUtc, fechaToIsoDate };
+export { parseFechaParam, hoyApp as hoyUtc, fechaToIsoDate };

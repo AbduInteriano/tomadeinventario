@@ -49,7 +49,9 @@ export default async function ConteoAreaPage({
       where: { asignacionId: asignacion.id },
       select: {
         id: true,
+        productoId: true,
         cantidadContada: true,
+        timestamp: true,
         producto: {
           select: {
             codigoBarras: true,
@@ -67,6 +69,7 @@ export default async function ConteoAreaPage({
         codigoEscaneado: true,
         descripcionLibre: true,
         cantidad: true,
+        timestamp: true,
       },
       orderBy: { timestamp: "desc" },
     }),
@@ -102,16 +105,19 @@ export default async function ConteoAreaPage({
         soloLectura={soloLectura}
         conteosIniciales={conteos.map((c) => ({
           id: c.id,
+          productoId: c.productoId,
           codigoBarras: c.producto.codigoBarras,
           descripcion: c.producto.descripcion,
           unidadMedida: c.producto.unidadMedida.abreviatura,
           cantidadContada: decimalToNumber(c.cantidadContada),
+          timestamp: c.timestamp.toISOString(),
         }))}
         noCatalogadosIniciales={noCatalogados.map((n) => ({
           id: n.id,
           codigoEscaneado: n.codigoEscaneado,
           descripcionLibre: n.descripcionLibre,
           cantidad: decimalToNumber(n.cantidad),
+          timestamp: n.timestamp.toISOString(),
         }))}
       />
     </>

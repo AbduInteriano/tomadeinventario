@@ -204,6 +204,15 @@ export function CatalogoClient() {
   async function confirmDelete() {
     if (!deleteTarget) return;
 
+    if (deleteTarget.type === "categoria" && deleteTarget.item.productosCount > 0) {
+      setFlash({
+        type: "error",
+        message: "No se puede eliminar una categoría con productos asociados.",
+      });
+      setDeleteTarget(null);
+      return;
+    }
+
     setSaving(true);
     setFlash(null);
 
@@ -223,15 +232,7 @@ export function CatalogoClient() {
     }
 
     if (deleteTarget.type === "categoria") {
-      if (data.softDeleted) {
-        setCategorias((prev) =>
-          prev.map((c) =>
-            c.id === deleteTarget.item.id ? { ...c, activo: false } : c
-          )
-        );
-      } else {
-        setCategorias((prev) => prev.filter((c) => c.id !== deleteTarget.item.id));
-      }
+      setCategorias((prev) => prev.filter((c) => c.id !== deleteTarget.item.id));
     } else {
       setUnidades((prev) => prev.filter((u) => u.id !== deleteTarget.item.id));
     }
@@ -267,7 +268,12 @@ export function CatalogoClient() {
       <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
         <h2 className="font-bold text-slate-900">Categorías</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Agrupan productos en el listado. Si tiene productos asociados, al eliminar se desactiva.
+          Solo se pueden eliminar categorías sin productos. Para vaciar una categoría, cambia la
+          categoría de sus productos en{" "}
+          <Link href="/supervisor/productos" className="font-medium text-blue-600">
+            Productos
+          </Link>
+          .
         </p>
 
         <form onSubmit={crearCategoria} className="mt-3 flex gap-2">
@@ -347,7 +353,8 @@ export function CatalogoClient() {
                           <button
                             type="button"
                             onClick={() => setDeleteTarget({ type: "categoria", item: c })}
-                            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600"
+                            disabled={c.productosCount > 0}
+                            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Eliminar
                           </button>
@@ -523,8 +530,8 @@ export function CatalogoClient() {
         message={
           deleteTarget?.type === "categoria"
             ? deleteTarget.item.productosCount > 0
-              ? `"${deleteTarget.item.nombre}" tiene ${deleteTarget.item.productosCount} producto(s). Se desactivará pero los productos existentes la conservarán.`
-              : `¿Eliminar la categoría "${deleteTarget.item.nombre}"?`
+              ? `"${deleteTarget.item.nombre}" tiene ${deleteTarget.item.productosCount} producto(s). Cambia la categoría de esos productos antes de eliminarla.`
+              : `¿Eliminar la categoría "${deleteTarget.item.nombre}"? Esta acción no se puede deshacer.`
             : `¿Eliminar la unidad "${deleteTarget?.item.nombre}" (${deleteTarget?.item.abreviatura})?`
         }
         confirmLabel="Confirmar"

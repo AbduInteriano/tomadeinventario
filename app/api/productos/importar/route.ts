@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Archivo requerido" }, { status: 400 });
   }
 
+  const MAX_BYTES = 10 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: "El archivo supera el límite de 10 MB" },
+      { status: 400 }
+    );
+  }
+
   const name = file instanceof File ? file.name : "";
   if (name && !name.toLowerCase().endsWith(".xlsx")) {
     return NextResponse.json(

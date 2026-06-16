@@ -27,14 +27,11 @@ const PRIORIDAD: Record<string, number> = {
   COMPLETADA: 3,
 };
 
-function hoyLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+import { fechaHoyIso } from "@/lib/fecha";
 
 export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientProps) {
   const router = useRouter();
-  const [fecha, setFecha] = useState(hoyLocal());
+  const [fecha, setFecha] = useState(fechaHoyIso());
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [asignaciones, setAsignaciones] = useState<AsignacionItem[]>([]);

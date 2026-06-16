@@ -121,9 +121,6 @@ export function ProductosClient() {
       page: String(p),
       limit: "50",
     });
-    if (!search.trim()) {
-      params.set("groupBy", "categoria");
-    }
 
     const res = await fetch(`/api/productos?${params}`);
     if (res.ok) {
@@ -290,6 +287,7 @@ export function ProductosClient() {
         <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
           {p.codigoInterno && <span>Int: {p.codigoInterno}</span>}
           <span>{p.unidadMedida}</span>
+          {p.categoria && <span>· {p.categoria}</span>}
         </div>
         <div className="mt-2 flex gap-2">
           <button
@@ -418,6 +416,11 @@ export function ProductosClient() {
                   </option>
                 ))}
               </select>
+              {editing && (
+                <span className="mt-1 block text-xs text-slate-500">
+                  Puedes mover el producto a otra categoría o dejarlo sin categoría.
+                </span>
+              )}
             </label>
 
             {(unidades.length === 0 || categorias.length === 0) && (

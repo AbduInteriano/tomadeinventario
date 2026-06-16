@@ -29,26 +29,43 @@ export async function GET(request: NextRequest) {
   const where = buildProductoSearchWhere(q);
 
   if (groupBy && !q.trim()) {
-    const productos = await prisma.producto.findMany({
-      where,
-      orderBy: [{ categoria: { nombre: "asc" } }, { descripcion: "asc" }],
-      select: productoSelect,
+    const grupos = await prisma.categoria.findMany({
+      where: { activo: true },
+      orderBy: { nombre: "asc" },
+      select: {
+        id: true,
+        nombre: true,
+        _count: { select: { productos: { where: { activo: true } } } },
+      },
     });
 
-    const gruposMap = new Map<string, ReturnType<typeof serializeProducto>[]>();
-    for (const p of productos) {
-      const key = p.categoria?.nombre ?? "Sin categoría";
-      if (!gruposMap.has(key)) gruposMap.set(key, []);
-      gruposMap.get(key)!.push(serializeProducto(p));
+    const sinCategoria = await prisma.producto.count({
+      where: { activo: true, categoriaId: null },
+    });
+
+    const result = grupos
+      .filter((g) => g._count.productos > 0)
+      .map((g) => ({
+        categoria: g.nombre,
+        categoriaId: g.id,
+        total: g._count.productos,
+        productos: [] as ReturnType<typeof serializeProducto>[],
+      }));
+
+    if (sinCategoria > 0) {
+      result.push({
+        categoria: "Sin categoría",
+        categoriaId: "",
+        total: sinCategoria,
+        productos: [],
+      });
     }
 
-    const grupos = Array.from(gruposMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([categoria, items]) => ({ categoria, productos: items, total: items.length }));
+    const total = result.reduce((s, g) => s + g.total, 0);
 
     return NextResponse.json({
-      grupos,
-      pagination: { page: 1, limit: productos.length, total: productos.length, totalPages: 1 },
+      grupos: result,
+      pagination: { page: 1, limit: total, total, totalPages: 1 },
     });
   }
 

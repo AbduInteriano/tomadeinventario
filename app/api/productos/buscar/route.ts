@@ -15,18 +15,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Código requerido" }, { status: 400 });
   }
 
-  const byBarras = await prisma.producto.findUnique({
-    where: { codigoBarras: codigo },
+  const producto = await prisma.producto.findFirst({
+    where: {
+      activo: true,
+      OR: [
+        { codigoBarras: { equals: codigo, mode: "insensitive" } },
+        { codigoInterno: { equals: codigo, mode: "insensitive" } },
+      ],
+    },
     select: productoSelect,
   });
-
-  const producto =
-    byBarras?.activo === true
-      ? byBarras
-      : await prisma.producto.findFirst({
-          where: { codigoInterno: codigo, activo: true },
-          select: productoSelect,
-        });
 
   if (!producto) {
     return NextResponse.json({ encontrado: false });

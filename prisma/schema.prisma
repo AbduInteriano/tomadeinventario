@@ -144,8 +144,9 @@ model ConteoInventario {
   producto        Producto                 @relation(fields: [productoId], references: [id])
   usuario         User                     @relation(fields: [usuarioId], references: [id])
 
-  @@unique([asignacionId, productoId])
   @@index([asignacionId])
+  @@index([asignacionId, timestamp])
+  @@index([productoId])
 }
 
 model ProductoNoCatalogado {
@@ -160,4 +161,5 @@ model ProductoNoCatalogado {
   usuario          User                     @relation(fields: [usuarioId], references: [id])
 
   @@index([asignacionId])
+  @@index([asignacionId, timestamp])
 }

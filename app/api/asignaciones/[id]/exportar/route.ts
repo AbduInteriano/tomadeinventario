@@ -36,7 +36,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             },
           },
         },
-        orderBy: { producto: { descripcion: "asc" } },
+        orderBy: { timestamp: "desc" },
+      },
+      noCatalogados: {
+        orderBy: { timestamp: "desc" },
       },
     },
   });
@@ -64,6 +67,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
+    })),
+    noCatalogados: asignacion.noCatalogados.map((n) => ({
+      codigoEscaneado: n.codigoEscaneado,
+      descripcionLibre: n.descripcionLibre,
+      cantidad: n.cantidad,
     })),
   });
 

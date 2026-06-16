@@ -1,6 +1,17 @@
 import { AsignacionEstado } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
+export {
+  fechaHoyIso,
+  fechaToIsoDate,
+  hoyApp,
+  isoToFechaDate,
+  parseFechaParam,
+} from "@/lib/fecha";
+
+/** @deprecated Usar hoyApp() */
+export { hoyApp as hoyUtc } from "@/lib/fecha";
+
 export const ESTADOS_TOMA_ABIERTA: AsignacionEstado[] = [
   AsignacionEstado.PENDIENTE,
   AsignacionEstado.EN_PROGRESO,
@@ -12,6 +23,10 @@ export async function findTomaActivaEnArea(areaId: string) {
     where: {
       areaId,
       estado: { in: ESTADOS_TOMA_ABIERTA },
+      archivada: false,
+    },
+    include: {
+      _count: { select: { conteos: true, noCatalogados: true } },
     },
   });
 }
@@ -64,20 +79,4 @@ export async function assertAsignacionAccess(
 export function decimalToNumber(value: { toNumber(): number } | number): number {
   if (typeof value === "number") return value;
   return value.toNumber();
-}
-
-export function parseFechaParam(value: string | null): Date | undefined {
-  if (!value?.trim()) return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) return undefined;
-  return new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`);
-}
-
-export function fechaToIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-export function hoyUtc(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }

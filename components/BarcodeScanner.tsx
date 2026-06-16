@@ -31,7 +31,7 @@ function mapCameraError(err: unknown): string {
     return "No se pudo usar la cámara trasera. Intenta de nuevo o ingresa el código manualmente.";
   }
   if (msg.includes("transition") || msg.includes("already") || msg.includes("running")) {
-    return "El escáner se reinició. Cierra y vuelve a abrir la cámara.";
+    return "El escáner se reinició. Pulsa Reintentar o ingresa el código manualmente.";
   }
 
   return `Error de cámara: ${err.message}. Puedes ingresar el código manualmente.`;
@@ -44,6 +44,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const startingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
   const lastScanRef = useRef<{ code: string; at: number } | null>(null);
 
   const handleScan = useCallback(
@@ -88,11 +89,11 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       await scanner.start(
         camera,
         {
-          fps: 10,
+          fps: 12,
           qrbox: (w: number, h: number) => {
             const edge = Math.min(w, h);
-            const width = Math.floor(edge * 0.9);
-            return { width, height: Math.floor(width * 0.45) };
+            const width = Math.floor(edge * 0.92);
+            return { width, height: Math.floor(width * 0.55) };
           },
           disableFlip: false,
         },
@@ -137,12 +138,12 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           if (cameras.length > 0) {
             const back =
               cameras.find((c) =>
-                /back|rear|trasera|environment/i.test(c.label)
+                /back|rear|trasera|environment|wide|tele/i.test(c.label)
               ) ?? cameras[cameras.length - 1];
             attempts.unshift(back.id);
           }
         } catch {
-          // getCameras can fail; facingMode still works on many devices
+          // getCameras can fail on iOS; facingMode still works
         }
 
         let lastErr: unknown = null;
@@ -178,52 +179,69 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
     const timer = window.setTimeout(() => {
       if (!cancelled) startScanner();
-    }, 150);
+    }, 200);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
       stopScanner();
     };
-  }, [containerId, handleScan]);
+  }, [containerId, handleScan, retryKey]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black">
       <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
-        <h2 className="text-lg font-semibold">Escanear código</h2>
+        <h2 className="text-base font-semibold">Escanear código</h2>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium active:bg-slate-600"
+          className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium active:bg-slate-600"
         >
           Cerrar
         </button>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
-        <div id={containerId} className="w-full max-w-md" style={{ minHeight: 240 }} />
+      <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-3">
+        <div
+          id={containerId}
+          className="w-full max-w-lg [&_video]:rounded-lg"
+          style={{ minHeight: 260 }}
+        />
 
         {starting && !error && (
-          <p className="mt-4 text-center text-sm text-white/80">Iniciando cámara…</p>
+          <p className="mt-3 text-center text-sm text-white/80">Iniciando cámara…</p>
         )}
 
         {error && (
-          <div className="mt-4 max-w-md rounded-xl bg-red-900/90 p-4 text-center text-white">
+          <div className="mt-3 max-w-md rounded-xl bg-red-900/90 p-4 text-center text-white">
             <p className="font-semibold">No se pudo usar la cámara</p>
             <p className="mt-2 text-sm leading-relaxed text-red-100">{error}</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 rounded-lg bg-white/20 px-4 py-2 text-sm font-medium"
-            >
-              Usar entrada manual
-            </button>
+            <div className="mt-4 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setStarting(true);
+                  setRetryKey((k) => k + 1);
+                }}
+                className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-900"
+              >
+                Reintentar
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg bg-white/20 px-4 py-2 text-sm font-medium"
+              >
+                Entrada manual
+              </button>
+            </div>
           </div>
         )}
 
-        {!error && (
-          <p className="mt-4 max-w-md text-center text-sm text-white/70">
-            Apunta al código de barras dentro del recuadro. El escaneo es automático.
+        {!error && !starting && (
+          <p className="mt-3 max-w-md text-center text-xs text-white/70">
+            Apunta al código dentro del recuadro. Funciona en celulares y tablets con cámara trasera.
           </p>
         )}
       </div>

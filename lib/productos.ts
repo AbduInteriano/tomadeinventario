@@ -168,6 +168,18 @@ export async function previewImportRows(rows: unknown[][]) {
   let sinCambios = 0;
   const errores: { fila: number; motivo: string }[] = [];
 
+  const [unidadesDb, categoriasDb] = await Promise.all([
+    prisma.unidadMedida.findMany({ where: { activo: true } }),
+    prisma.categoria.findMany({ where: { activo: true } }),
+  ]);
+
+  const unidadMap = new Map(
+    unidadesDb.map((u) => [u.abreviatura.toUpperCase(), u])
+  );
+  const categoriaMap = new Map(
+    categoriasDb.map((c) => [normalizeNombre(c.nombre).toLowerCase(), c])
+  );
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const fila = i + 2;
@@ -175,9 +187,7 @@ export async function previewImportRows(rows: unknown[][]) {
     const abreviatura = cellToString(row[3]) || "UN";
     const categoriaNombre = cellToString(row[4]) || null;
 
-    const unidad = await prisma.unidadMedida.findFirst({
-      where: { abreviatura: { equals: abreviatura.toUpperCase(), mode: "insensitive" } },
-    });
+    const unidad = unidadMap.get(abreviatura.toUpperCase());
     if (!unidad) {
       errores.push({ fila, motivo: `Unidad "${abreviatura}" no existe` });
       continue;
@@ -185,9 +195,7 @@ export async function previewImportRows(rows: unknown[][]) {
 
     let categoriaId: string | null = null;
     if (categoriaNombre) {
-      const categoria = await prisma.categoria.findFirst({
-        where: { nombre: { equals: normalizeNombre(categoriaNombre), mode: "insensitive" } },
-      });
+      const categoria = categoriaMap.get(normalizeNombre(categoriaNombre).toLowerCase());
       if (!categoria) {
         errores.push({ fila, motivo: `Categoría "${categoriaNombre}" no existe` });
         continue;
@@ -243,8 +251,29 @@ export function validateExcelHeaders(row: unknown[]): boolean {
 
 export function cellToString(value: unknown): string {
   if (value === null || value === undefined) return "";
-  if (typeof value === "object" && value !== null && "text" in value) {
-    return String((value as { text: string }).text).trim();
+  if (typeof value === "object" && value !== null) {
+    if ("text" in value && (value as { text: string }).text != null) {
+      return String((value as { text: string }).text).trim();
+    }
+    if ("result" in value) {
+      return cellToString((value as { result: unknown }).result);
+    }
+    if ("richText" in value && Array.isArray((value as { richText: { text: string }[] }).richText)) {
+      return (value as { richText: { text: string }[] }).richText
+        .map((r) => r.text)
+        .join("")
+        .trim();
+    }
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const int = Math.trunc(value);
+    if (int >= 0 && int < 1e13) {
+      const s = String(int);
+      if (s.length <= 8) return s.padStart(8, "0");
+      if (s.length < 13) return s.padStart(13, "0");
+      return s;
+    }
+    return String(value);
   }
   return String(value).trim();
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertAsignacionAccess, decimalToNumber } from "@/lib/inventario";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
-import { Prisma } from "@prisma/client";
+import { AsignacionEstado, Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   const auth = await requireConteoSessionApi();
@@ -23,8 +23,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { asignacionId, codigoEscaneado, descripcionLibre, cantidad } = body;
+  const codigo = codigoEscaneado?.trim();
 
-  if (!asignacionId || !codigoEscaneado?.trim() || !descripcionLibre?.trim()) {
+  if (!asignacionId || !codigo || !descripcionLibre?.trim()) {
     return NextResponse.json(
       { error: "asignacionId, codigoEscaneado y descripcionLibre son requeridos" },
       { status: 400 }
@@ -46,22 +47,44 @@ export async function POST(request: NextRequest) {
   }
 
   const cantidadDecimal = new Prisma.Decimal(cantidad);
+  const descripcion = descripcionLibre.trim();
 
-  const registro = await prisma.productoNoCatalogado.create({
-      data: {
-        asignacionId,
-        codigoEscaneado: codigoEscaneado.trim(),
-        descripcionLibre: descripcionLibre.trim(),
-        cantidad: cantidadDecimal,
-        usuarioId: session.user.id,
-    },
-  });
+  try {
+    const registro = await prisma.$transaction(async (tx) => {
+      const asignacion = await tx.asignacionInventarioArea.findUnique({
+        where: { id: asignacionId },
+        select: { estado: true },
+      });
+      if (!asignacion || asignacion.estado !== AsignacionEstado.EN_PROGRESO) {
+        throw new Error("NO_INICIADA");
+      }
 
-  return NextResponse.json({
-    id: registro.id,
-    codigoEscaneado: registro.codigoEscaneado,
-    descripcionLibre: registro.descripcionLibre,
-    cantidad: decimalToNumber(registro.cantidad),
-    timestamp: registro.timestamp,
-  });
+      return tx.productoNoCatalogado.create({
+        data: {
+          asignacionId,
+          codigoEscaneado: codigo,
+          descripcionLibre: descripcion,
+          cantidad: cantidadDecimal,
+          usuarioId: session.user.id,
+        },
+      });
+    });
+
+    return NextResponse.json({
+      id: registro.id,
+      codigoEscaneado: registro.codigoEscaneado,
+      descripcionLibre: registro.descripcionLibre,
+      cantidad: decimalToNumber(registro.cantidad),
+      timestamp: registro.timestamp,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "NO_INICIADA") {
+      return NextResponse.json(
+        { error: "La toma debe estar en progreso para registrar conteos" },
+        { status: 403 }
+      );
+    }
+    console.error("[conteos/no-catalogado]", err);
+    return NextResponse.json({ error: "Error al guardar el registro" }, { status: 500 });
+  }
 }

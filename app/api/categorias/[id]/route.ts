@@ -51,9 +51,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const updated = await prisma.categoria.update({
     where: { id: params.id },
     data: updateData,
-    include: {
-      _count: { select: { productos: { where: { activo: true } } } },
-    },
+      include: {
+        _count: { select: { productos: true } },
+      },
   });
 
   return NextResponse.json(
@@ -68,7 +68,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const categoria = await prisma.categoria.findUnique({
     where: { id: params.id },
     include: {
-      _count: { select: { productos: { where: { activo: true } } } },
+      _count: { select: { productos: true } },
     },
   });
 
@@ -77,23 +77,18 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   }
 
   if (categoria._count.productos > 0) {
-    await prisma.categoria.update({
-      where: { id: params.id },
-      data: { activo: false },
-    });
-
-    return NextResponse.json({
-      id: params.id,
-      softDeleted: true,
-      message: `Categoría desactivada. ${categoria._count.productos} producto(s) la siguen usando pero no aparecerá al crear nuevos productos.`,
-    });
+    return NextResponse.json(
+      {
+        error: `No se puede eliminar: hay ${categoria._count.productos} producto(s) en esta categoría. Cambia la categoría de esos productos primero.`,
+      },
+      { status: 409 }
+    );
   }
 
   await prisma.categoria.delete({ where: { id: params.id } });
 
   return NextResponse.json({
     id: params.id,
-    softDeleted: false,
     message: "Categoría eliminada correctamente",
   });
 }
