@@ -5,6 +5,8 @@ import {
   findCategoriaDuplicada,
   serializeCategoriaDetalle,
   validateCategoriaNombre,
+  categoriaProductosActivosCount,
+  countProductosActivosPorCategoria,
 } from "@/lib/catalogo";
 
 type RouteParams = { params: { id: string } };
@@ -52,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     where: { id: params.id },
     data: updateData,
       include: {
-        _count: { select: { productos: true } },
+        _count: { select: { productos: categoriaProductosActivosCount.productos } },
       },
   });
 
@@ -65,27 +67,32 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const auth = await requireSupervisorApi();
   if ("error" in auth) return auth.error;
 
+  const activos = await countProductosActivosPorCategoria(params.id);
+
   const categoria = await prisma.categoria.findUnique({
     where: { id: params.id },
-    include: {
-      _count: { select: { productos: true } },
-    },
   });
 
   if (!categoria) {
     return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
   }
 
-  if (categoria._count.productos > 0) {
+  if (activos > 0) {
     return NextResponse.json(
       {
-        error: `No se puede eliminar: hay ${categoria._count.productos} producto(s) en esta categoría. Cambia la categoría de esos productos primero.`,
+        error: `No se puede eliminar: hay ${activos} producto(s) activo(s) en esta categoría. Cambia la categoría de esos productos primero.`,
       },
       { status: 409 }
     );
   }
 
-  await prisma.categoria.delete({ where: { id: params.id } });
+  await prisma.$transaction([
+    prisma.producto.updateMany({
+      where: { categoriaId: params.id, activo: false },
+      data: { categoriaId: null },
+    }),
+    prisma.categoria.delete({ where: { id: params.id } }),
+  ]);
 
   return NextResponse.json({
     id: params.id,

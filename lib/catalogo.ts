@@ -44,6 +44,11 @@ export async function countProductosActivosPorCategoria(categoriaId: string) {
   });
 }
 
+/** Conteo Prisma para relaciones producto → categoría (solo activos). */
+export const categoriaProductosActivosCount = {
+  productos: { where: { activo: true } },
+} as const;
+
 export async function countProductosActivosPorUnidad(unidadMedidaId: string) {
   return prisma.producto.count({
     where: { unidadMedidaId, activo: true },

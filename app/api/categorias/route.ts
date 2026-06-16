@@ -6,6 +6,7 @@ import {
   serializeCategoria,
   serializeCategoriaDetalle,
   validateCategoriaNombre,
+  categoriaProductosActivosCount,
 } from "@/lib/catalogo";
 
 export async function GET(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const categorias = await prisma.categoria.findMany({
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
-        _count: { select: { productos: true } },
+        _count: { select: { productos: categoriaProductosActivosCount.productos } },
       },
     });
 
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
         where: { id: existing.id },
         data: { activo: true, nombre },
         include: {
-          _count: { select: { productos: { where: { activo: true } } } },
+          _count: { select: { productos: categoriaProductosActivosCount.productos } },
         },
       });
       return NextResponse.json(
