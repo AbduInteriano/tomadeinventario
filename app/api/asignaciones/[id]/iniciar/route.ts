@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
 import { iniciarToma } from "@/lib/tomas";
-import { Role } from "@prisma/client";
+import { canAccessSupervisor } from "@/lib/roles";
 
 type RouteParams = { params: { id: string } };
 
@@ -12,7 +12,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   const result = await iniciarToma(
     params.id,
     auth.session.user.id,
-    auth.session.user.role === Role.SUPERVISOR
+    canAccessSupervisor(auth.session.user.role)
   );
 
   if ("error" in result) {

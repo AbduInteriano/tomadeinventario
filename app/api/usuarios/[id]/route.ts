@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSupervisorApi, normalizeNombre } from "@/lib/api-auth";
+import { requireStaffApi } from "@/lib/api-auth";
 import {
   assertPuedeDesactivar,
   findUsernameDuplicado,
@@ -10,15 +10,20 @@ import {
   normalizeUsername,
   serializeUsuario,
   usuarioTieneHistorial,
-  validateNombreUsuario,
   validatePassword,
   validateUsername,
 } from "@/lib/usuarios";
+import {
+  puedeCrearRol,
+  puedeDesactivarUsuario,
+  puedeEditarUsuario,
+  puedeRestablecerPassword,
+} from "@/lib/roles";
 
 type RouteParams = { params: { id: string } };
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const auth = await requireSupervisorApi();
+  const auth = await requireStaffApi();
   if ("error" in auth) return auth.error;
 
   const usuario = await prisma.user.findUnique({ where: { id: params.id } });
@@ -26,8 +31,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
   }
 
+  const editError = puedeEditarUsuario(auth.session.user.id, auth.session.user.role, {
+    id: usuario.id,
+    role: usuario.role,
+  });
+  if (editError) {
+    return NextResponse.json({ error: editError }, { status: 403 });
+  }
+
   let body: {
-    nombre?: string;
     username?: string;
     role?: string;
     activo?: boolean;
@@ -42,6 +54,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 
   if (body.activo === false && usuario.activo) {
+    const desactivarError = puedeDesactivarUsuario(
+      auth.session.user.id,
+      auth.session.user.role,
+      { id: usuario.id, role: usuario.role }
+    );
+    if (desactivarError) {
+      return NextResponse.json({ error: desactivarError }, { status: 403 });
+    }
     const check = await assertPuedeDesactivar(params.id, auth.session.user.id);
     if (check.error) {
       return NextResponse.json({ error: check.error }, { status: 400 });
@@ -56,14 +76,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     password?: string;
   } = {};
 
-  if (body.nombre !== undefined) {
-    const nombreError = validateNombreUsuario(body.nombre);
-    if (nombreError) {
-      return NextResponse.json({ error: nombreError }, { status: 400 });
-    }
-    updateData.nombre = normalizeNombre(body.nombre);
-  }
-
   if (body.username !== undefined) {
     const usernameError = validateUsername(body.username);
     if (usernameError) {
@@ -72,13 +84,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const username = normalizeUsername(body.username);
     const duplicado = await findUsernameDuplicado(username, params.id);
     if (duplicado) {
-      return NextResponse.json({ error: "Ya existe un usuario con ese nombre de usuario" }, { status: 409 });
+      return NextResponse.json({ error: "Ya existe un usuario con ese nombre" }, { status: 409 });
     }
     updateData.username = username;
+    updateData.nombre = username;
   }
 
   if (body.role !== undefined) {
-    if (usuario.role === Role.SUPERVISOR && body.role !== Role.SUPERVISOR && usuario.activo) {
+    let newRole: Role = Role.TOMADOR;
+    if (body.role === Role.SUPERVISOR) newRole = Role.SUPERVISOR;
+    else if (body.role === Role.ADMIN_TECNOLOGIA) newRole = Role.ADMIN_TECNOLOGIA;
+
+    if (!puedeCrearRol(auth.session.user.role, newRole)) {
+      return NextResponse.json(
+        { error: "No tienes permiso para asignar ese rol" },
+        { status: 403 }
+      );
+    }
+
+    if (usuario.role === Role.SUPERVISOR && newRole !== Role.SUPERVISOR && usuario.activo) {
       const check = await assertPuedeDesactivar(params.id, auth.session.user.id);
       if (check.error) {
         return NextResponse.json(
@@ -87,7 +111,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
     }
-    updateData.role = body.role === Role.SUPERVISOR ? Role.SUPERVISOR : Role.TOMADOR;
+    updateData.role = newRole;
   }
 
   if (body.activo !== undefined) {
@@ -97,11 +121,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   let passwordGenerada: string | undefined;
 
   if (body.restablecerPassword) {
+    const pwdError = puedeRestablecerPassword(
+      auth.session.user.id,
+      auth.session.user.role,
+      { id: usuario.id, role: usuario.role }
+    );
+    if (pwdError) {
+      return NextResponse.json({ error: pwdError }, { status: 403 });
+    }
+
     const plain = body.nuevaPassword?.trim() || generatePassword();
     if (body.nuevaPassword?.trim()) {
-      const pwdError = validatePassword(plain);
-      if (pwdError) {
-        return NextResponse.json({ error: pwdError }, { status: 400 });
+      const validateErr = validatePassword(plain);
+      if (validateErr) {
+        return NextResponse.json({ error: validateErr }, { status: 400 });
       }
     }
     updateData.password = await hashPassword(plain);
@@ -124,12 +157,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
-  const auth = await requireSupervisorApi();
+  const auth = await requireStaffApi();
   if ("error" in auth) return auth.error;
 
   const usuario = await prisma.user.findUnique({ where: { id: params.id } });
   if (!usuario) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
+  const desactivarError = puedeDesactivarUsuario(
+    auth.session.user.id,
+    auth.session.user.role,
+    { id: usuario.id, role: usuario.role }
+  );
+  if (desactivarError) {
+    return NextResponse.json({ error: desactivarError }, { status: 403 });
   }
 
   const check = await assertPuedeDesactivar(params.id, auth.session.user.id);

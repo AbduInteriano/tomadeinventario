@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { homePathForRole } from "@/lib/roles";
+import { Role } from "@prisma/client";
 
 export function LoginForm() {
   const router = useRouter();
@@ -17,7 +19,7 @@ export function LoginForm() {
     setLoading(true);
 
     const result = await signIn("credentials", {
-      username: username.trim().toLowerCase(),
+      username: username.trim(),
       password,
       redirect: false,
     });
@@ -32,8 +34,8 @@ export function LoginForm() {
     const sessionRes = await fetch("/api/auth/session");
     const session = await sessionRes.json();
 
-    if (session?.user?.role === "SUPERVISOR") {
-      router.push("/supervisor");
+    if (session?.user?.role) {
+      router.push(homePathForRole(session.user.role as Role));
     } else {
       router.push("/tomador");
     }

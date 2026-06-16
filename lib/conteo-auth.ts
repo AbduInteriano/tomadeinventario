@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
+import { canPerformConteo } from "@/lib/roles";
 
-export function canPerformConteo(role: Role): boolean {
-  return role === Role.TOMADOR || role === Role.SUPERVISOR;
+export function canPerformConteoRole(role: Role): boolean {
+  return canPerformConteo(role);
 }
 
 export async function requireConteoSessionApi() {

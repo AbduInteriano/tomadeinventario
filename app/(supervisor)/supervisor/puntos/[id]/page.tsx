@@ -3,16 +3,15 @@ import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
 import { AreasClient } from "@/components/AreasClient";
-import { requireRole } from "@/lib/session";
+import { requireSupervisorAccess } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
 
 export default async function PuntoAreasPage({
   params,
 }: {
   params: { id: string };
 }) {
-  await requireRole(Role.SUPERVISOR);
+  await requireSupervisorAccess();
 
   const punto = await prisma.punto.findUnique({
     where: { id: params.id },

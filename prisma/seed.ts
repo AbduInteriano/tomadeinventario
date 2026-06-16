@@ -50,8 +50,20 @@ const PRODUCTOS_DEMO = [
 ];
 
 async function main() {
+  const adminPassword = await bcrypt.hash("AdminTech123!", 12);
   const supervisorPassword = await bcrypt.hash("Admin123!", 12);
   const tomadorPassword = await bcrypt.hash("Tomador123!", 12);
+
+  await prisma.user.upsert({
+    where: { username: "admin.tech" },
+    update: {},
+    create: {
+      username: "admin.tech",
+      password: adminPassword,
+      nombre: "admin.tech",
+      role: Role.ADMIN_TECNOLOGIA,
+    },
+  });
 
   await prisma.user.upsert({
     where: { username: "supervisor" },
@@ -124,8 +136,9 @@ async function main() {
   }
 
   console.log("Seed completado:");
-  console.log("  Supervisor: supervisor / Admin123!");
-  console.log("  Tomador:    tomador / Tomador123!");
+  console.log("  Admin tecnología: admin.tech / AdminTech123!");
+  console.log("  Supervisor:       supervisor / Admin123!");
+  console.log("  Tomador:          tomador / Tomador123!");
 }
 
 main()

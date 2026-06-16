@@ -2,11 +2,10 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
 import { ProductosClient } from "@/components/ProductosClient";
-import { requireRole } from "@/lib/session";
-import { Role } from "@prisma/client";
+import { requireSupervisorAccess } from "@/lib/session";
 
 export default async function ProductosPage() {
-  const session = await requireRole(Role.SUPERVISOR);
+  const session = await requireSupervisorAccess();
 
   return (
     <>

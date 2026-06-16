@@ -43,8 +43,6 @@ type PendingAction =
 
 export function ConteoAreaClient({
   asignacionId,
-  areaNombre,
-  puntoNombre,
   estadoInicial,
   soloLectura = false,
   conteosIniciales,
@@ -331,7 +329,7 @@ export function ConteoAreaClient({
   const puedeGestionar = !soloLectura && estado !== "COMPLETADA";
 
   return (
-    <div className="pb-28">
+    <div className="pb-16">
       {showScanner && (
         <BarcodeScanner
           onScan={(code) => procesarCodigo(code)}
@@ -339,73 +337,58 @@ export function ConteoAreaClient({
         />
       )}
 
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4">
-        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <p className="text-sm text-slate-500">{puntoNombre}</p>
-          <p className="text-xl font-bold text-slate-900">{areaNombre}</p>
-          <p className="mt-2 text-sm text-slate-600">
-            {conteos.length}{" "}
-            {conteos.length === 1 ? "producto registrado" : "productos registrados"}
-          </p>
+      <div className="mx-auto max-w-lg space-y-3 px-4 py-3">
+        <div className="flex items-center justify-between text-sm text-slate-600">
+          <span>
+            {conteos.length + noCatalogados.length}{" "}
+            {conteos.length + noCatalogados.length === 1 ? "registro" : "registros"}
+          </span>
           {(conteos.length > 0 || noCatalogados.length > 0 || estado === "COMPLETADA") && (
             <button
               type="button"
               onClick={descargarExcel}
               disabled={exportando}
-              className="mt-3 w-full rounded-lg border border-green-600 py-2.5 text-sm font-semibold text-green-700 active:bg-green-50 disabled:opacity-60"
+              className="text-green-700 disabled:opacity-60"
             >
-              {exportando ? "Generando Excel…" : "Descargar Excel del conteo"}
+              {exportando ? "Generando…" : "Excel"}
             </button>
           )}
         </div>
 
         {soloLectura && estado !== "COMPLETADA" && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Vista de solo lectura. Solo el usuario asignado puede modificar esta toma.
-          </div>
+          <p className="text-xs text-slate-500">Solo lectura</p>
         )}
 
         {!bloqueado && estado === "PENDIENTE" && puedeGestionar && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-            <p className="text-sm text-blue-900">
-              Debes iniciar la toma antes de registrar conteos.
-            </p>
-            <button
-              type="button"
-              onClick={iniciarToma}
-              disabled={completando}
-              className="mt-3 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-60"
-            >
-              {completando ? "Iniciando…" : "Iniciar toma"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={iniciarToma}
+            disabled={completando}
+            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {completando ? "Iniciando…" : "Iniciar toma"}
+          </button>
         )}
 
         {!bloqueado && estado === "PAUSADA" && puedeGestionar && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
-            <p className="text-sm text-amber-900">
-              Esta toma está pausada. Reanúdala para seguir contando.
-            </p>
-            <button
-              type="button"
-              onClick={iniciarToma}
-              disabled={completando}
-              className="mt-3 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-60"
-            >
-              {completando ? "Reanudando…" : "Reanudar toma"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={iniciarToma}
+            disabled={completando}
+            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {completando ? "Reanudando…" : "Reanudar toma"}
+          </button>
         )}
 
         {puedeEscanear && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             <button
               type="button"
               onClick={() => setShowScanner(true)}
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-4 text-lg font-semibold text-white shadow active:bg-blue-700 disabled:opacity-60"
+              className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
-              <span className="text-2xl">📷</span>
               Escanear código
             </button>
 
@@ -413,19 +396,19 @@ export function ConteoAreaClient({
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="Ingresar código manualmente"
+                placeholder="Código manual"
                 value={codigoManual}
                 onChange={(e) => setCodigoManual(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") procesarCodigo(codigoManual);
                 }}
-                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600"
               />
               <button
                 type="button"
                 onClick={() => procesarCodigo(codigoManual)}
                 disabled={loading || !codigoManual.trim()}
-                className="shrink-0 rounded-xl bg-slate-800 px-5 py-3 font-semibold text-white active:bg-slate-900 disabled:opacity-60"
+                className="shrink-0 rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 Buscar
               </button>
@@ -446,37 +429,29 @@ export function ConteoAreaClient({
         )}
 
         {pending && (
-          <div className="rounded-xl border-2 border-blue-500 bg-blue-50 p-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
             {pending.type === "catalogado" ? (
               <>
-                <p className="text-xs font-medium uppercase text-blue-600">Producto encontrado</p>
-                <p className="mt-1 text-lg font-bold text-slate-900">
-                  {pending.producto.descripcion}
-                </p>
-                <p className="text-sm text-slate-600">
+                <p className="font-medium text-slate-900">{pending.producto.descripcion}</p>
+                <p className="text-xs text-slate-500">
                   {pending.producto.codigoBarras} · {pending.producto.unidadMedida}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-xs font-medium uppercase text-amber-600">No catalogado</p>
-                <p className="mt-1 font-mono text-lg text-slate-900">{pending.codigo}</p>
-                <label className="mt-3 block text-sm font-medium text-slate-700">
-                  Descripción
-                  <input
-                    type="text"
-                    value={descripcionLibre}
-                    onChange={(e) => setDescripcionLibre(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
-                    placeholder="Describe el producto"
-                    autoFocus
-                  />
-                </label>
+                <p className="text-xs text-amber-700">No catalogado · {pending.codigo}</p>
+                <input
+                  type="text"
+                  value={descripcionLibre}
+                  onChange={(e) => setDescripcionLibre(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Descripción"
+                  autoFocus
+                />
               </>
             )}
 
-            <label className="mt-3 block text-sm font-medium text-slate-700">
-              Cantidad
+            <div className="mt-2 flex items-center gap-2">
               <input
                 type="number"
                 inputMode="decimal"
@@ -484,15 +459,13 @@ export function ConteoAreaClient({
                 step="any"
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-xl font-semibold"
+                className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-base font-semibold"
+                aria-label="Cantidad"
               />
-            </label>
-
-            <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={() => setPending(null)}
-                className="flex-1 rounded-xl border border-slate-300 py-3 font-medium text-slate-700"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
               >
                 Cancelar
               </button>
@@ -500,78 +473,60 @@ export function ConteoAreaClient({
                 type="button"
                 onClick={guardarConteo}
                 disabled={loading}
-                className="flex-1 rounded-xl bg-green-600 py-3 font-semibold text-white active:bg-green-700 disabled:opacity-60"
+                className="flex-1 rounded-lg bg-green-600 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {loading ? "Guardando…" : "Guardar"}
+                {loading ? "…" : "Guardar"}
               </button>
             </div>
           </div>
         )}
 
-        <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Conteos ({conteos.length})
-          </h2>
-          {conteos.length === 0 ? (
-            <p className="rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">
-              Aún no hay productos contados en esta área.
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100 rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-              {conteos.map((c) => (
-                <li key={c.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">{c.descripcion}</p>
-                      <p className="text-xs text-slate-500">{c.codigoBarras}</p>
-                    </div>
-                    <span className="shrink-0 text-lg font-bold text-blue-600">
-                      {c.cantidadContada} {c.unidadMedida}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {noCatalogados.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-600">
-              No catalogados ({noCatalogados.length})
-            </h2>
-            <ul className="divide-y divide-amber-100 rounded-xl bg-amber-50 shadow-sm ring-1 ring-amber-200">
-              {noCatalogados.map((n) => (
-                <li key={n.id} className="px-4 py-3">
-                  <p className="font-medium text-slate-900">{n.descripcionLibre}</p>
-                  <p className="text-xs text-slate-500">
-                    {n.codigoEscaneado} · {n.cantidad} uds.
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {conteos.length === 0 && noCatalogados.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">Sin registros aún</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 rounded-lg bg-white ring-1 ring-slate-200">
+            {conteos.map((c) => (
+              <li key={c.id} className="flex items-start justify-between gap-2 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{c.descripcion}</p>
+                  <p className="text-xs text-slate-500">{c.codigoBarras}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-blue-600">
+                  {c.cantidadContada} {c.unidadMedida}
+                </span>
+              </li>
+            ))}
+            {noCatalogados.map((n) => (
+              <li key={n.id} className="flex items-start justify-between gap-2 bg-amber-50/50 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-900">{n.descripcionLibre}</p>
+                  <p className="text-xs text-amber-700">{n.codigoEscaneado} · no cat.</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-slate-700">{n.cantidad}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
       {!bloqueado && estado === "EN_PROGRESO" && puedeGestionar && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white p-4">
-          <div className="mx-auto flex max-w-lg gap-2">
+        <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 py-2">
+          <div className="mx-auto flex max-w-lg justify-center gap-4 text-sm">
             <button
               type="button"
               onClick={pausarToma}
               disabled={completando}
-              className="flex-1 rounded-xl border-2 border-amber-500 py-3.5 font-semibold text-amber-700 active:bg-amber-50 disabled:opacity-60"
+              className="text-amber-700 disabled:opacity-50"
             >
-              {completando ? "…" : "Pausar"}
+              Pausar
             </button>
             <button
               type="button"
               onClick={finalizarToma}
               disabled={completando}
-              className="flex-1 rounded-xl border-2 border-green-600 py-3.5 font-semibold text-green-700 active:bg-green-50 disabled:opacity-60"
+              className="text-green-700 disabled:opacity-50"
             >
-              {completando ? "…" : "Finalizar"}
+              Finalizar
             </button>
           </div>
         </div>

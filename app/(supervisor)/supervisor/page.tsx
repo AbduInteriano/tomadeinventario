@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
-import { requireRole } from "@/lib/session";
+import { requireSupervisorAccess } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hoyUtc } from "@/lib/inventario";
-import { Role } from "@prisma/client";
 
 export default async function SupervisorDashboardPage() {
-  const session = await requireRole(Role.SUPERVISOR);
+  const session = await requireSupervisorAccess();
   const hoy = hoyUtc();
 
   const [puntosCount, productosCount, tomasHoy] = await Promise.all([

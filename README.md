@@ -45,10 +45,11 @@ Abre [http://localhost:3000](http://localhost:3000).
 
 ## Usuarios de prueba (seed)
 
-| Rol        | Usuario     | Contraseña   |
-|------------|-------------|--------------|
-| Supervisor | supervisor  | Admin123!    |
-| Tomador    | tomador     | Tomador123!  |
+| Rol | Usuario | Contraseña |
+|-----|---------|------------|
+| Admin tecnología | admin.tech | AdminTech123! |
+| Supervisor | supervisor | Admin123! |
+| Tomador | tomador | Tomador123! |
 
 El seed crea 8 puntos iniciales, 3 productos de demo y un inventario activo con una área asignada al tomador.
 

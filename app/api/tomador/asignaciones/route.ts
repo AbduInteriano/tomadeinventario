@@ -8,13 +8,13 @@ import {
   hoyUtc,
   fechaToIsoDate,
 } from "@/lib/tomas";
-import { Role } from "@prisma/client";
+import { canAccessSupervisor } from "@/lib/roles";
 
 export async function GET(request: NextRequest) {
   const auth = await requireConteoSessionApi();
   if ("error" in auth) return auth.error;
   const session = auth.session;
-  const isSupervisor = session.user.role === Role.SUPERVISOR;
+  const isSupervisor = canAccessSupervisor(session.user.role);
 
   const fechaParam = request.nextUrl.searchParams.get("fecha");
   const fecha = parseFechaParam(fechaParam) ?? hoyUtc();

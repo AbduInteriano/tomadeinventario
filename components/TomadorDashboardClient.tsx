@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EstadoBadge } from "@/components/AppHeader";
@@ -20,6 +20,13 @@ interface TomadorDashboardClientProps {
   isSupervisor: boolean;
 }
 
+const PRIORIDAD: Record<string, number> = {
+  EN_PROGRESO: 0,
+  PAUSADA: 1,
+  PENDIENTE: 2,
+  COMPLETADA: 3,
+};
+
 function hoyLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -32,6 +39,7 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
   const [actionId, setActionId] = useState<string | null>(null);
   const [asignaciones, setAsignaciones] = useState<AsignacionItem[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [showFinalizadas, setShowFinalizadas] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exportando, setExportando] = useState(false);
 
@@ -54,48 +62,18 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
     };
   }, [fecha]);
 
-  function toggleSelected(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const activas = useMemo(
+    () =>
+      asignaciones
+        .filter((a) => a.estado !== "COMPLETADA")
+        .sort((a, b) => (PRIORIDAD[a.estado] ?? 9) - (PRIORIDAD[b.estado] ?? 9)),
+    [asignaciones]
+  );
 
-  async function descargarSeleccionados() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-
-    setExportando(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/conteos/exportar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "No se pudo generar el Excel");
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] ?? `conteos-${fecha}.xlsx`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      setMessage(`Excel descargado (${ids.length} toma${ids.length === 1 ? "" : "s"})`);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Error al descargar Excel");
-    } finally {
-      setExportando(false);
-    }
-  }
+  const finalizadas = useMemo(
+    () => asignaciones.filter((a) => a.estado === "COMPLETADA"),
+    [asignaciones]
+  );
 
   async function iniciarToma(id: string) {
     setActionId(id);
@@ -121,11 +99,10 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
 
   async function pausarToma(id: string) {
     setActionId(id);
-    setMessage(null);
     const res = await fetch(`/api/asignaciones/${id}/pausar`, { method: "POST" });
-    const data = await res.json();
     setActionId(null);
     if (!res.ok) {
+      const data = await res.json();
       setMessage(data.error ?? "Error al pausar");
       return;
     }
@@ -133,245 +110,235 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
   }
 
   async function finalizarToma(id: string) {
-    if (!confirm("¿Finalizar esta toma? No podrás agregar más conteos.")) return;
+    if (!confirm("¿Finalizar esta toma?")) return;
     setActionId(id);
-    setMessage(null);
     const res = await fetch(`/api/asignaciones/${id}/finalizar`, { method: "POST" });
-    const data = await res.json();
     setActionId(null);
     if (!res.ok) {
+      const data = await res.json();
       setMessage(data.error ?? "Error al finalizar");
       return;
     }
     await refreshList();
   }
 
-  const pendientes = asignaciones.filter((a) => a.estado === "PENDIENTE");
-  const enProgreso = asignaciones.filter((a) => a.estado === "EN_PROGRESO");
-  const pausadas = asignaciones.filter((a) => a.estado === "PAUSADA");
-  const finalizadas = asignaciones.filter((a) => a.estado === "COMPLETADA");
+  async function descargarSeleccionados() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setExportando(true);
+    try {
+      const res = await fetch("/api/conteos/exportar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error("No se pudo generar el Excel");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `conteos-${fecha}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Error al descargar");
+    } finally {
+      setExportando(false);
+    }
+  }
 
-  function renderToma(a: AsignacionItem, selectable = false) {
+  function renderAccionPrincipal(a: AsignacionItem, busy: boolean) {
+    const allowManage = a.esPropia && a.estado !== "COMPLETADA";
+
+    if (allowManage && a.estado === "PENDIENTE") {
+      return (
+        <button
+          type="button"
+          onClick={() => iniciarToma(a.id)}
+          disabled={busy}
+          className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "…" : "Iniciar"}
+        </button>
+      );
+    }
+    if (allowManage && (a.estado === "EN_PROGRESO" || a.estado === "PAUSADA")) {
+      return (
+        <Link
+          href={`/tomador/area/${a.id}`}
+          className="block w-full rounded-lg bg-blue-600 py-2.5 text-center text-sm font-semibold text-white"
+        >
+          {a.estado === "PAUSADA" ? "Reanudar conteo" : "Continuar conteo"}
+        </Link>
+      );
+    }
+    return (
+      <Link
+        href={`/tomador/area/${a.id}`}
+        className="block w-full rounded-lg border border-slate-200 py-2.5 text-center text-sm font-medium text-slate-700"
+      >
+        Ver conteo
+      </Link>
+    );
+  }
+
+  function renderTomaActiva(a: AsignacionItem) {
     const busy = actionId === a.id;
     const allowManage = a.esPropia && a.estado !== "COMPLETADA";
+
+    return (
+      <li key={a.id} className="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-slate-900">{a.area.nombre}</p>
+            <p className="truncate text-xs text-slate-500">{a.area.punto}</p>
+          </div>
+          <EstadoBadge estado={a.estado} />
+        </div>
+
+        {isSupervisor && !a.esPropia && (
+          <p className="mt-1 text-xs text-blue-600">Asignada a {a.usuarioNombre}</p>
+        )}
+
+        <div className="mt-3">{renderAccionPrincipal(a, busy)}</div>
+
+        {allowManage && (a.estado === "EN_PROGRESO" || a.estado === "PAUSADA") && (
+          <div className="mt-2 flex justify-center gap-4 text-xs">
+            {a.estado === "EN_PROGRESO" && (
+              <button
+                type="button"
+                onClick={() => pausarToma(a.id)}
+                disabled={busy}
+                className="text-amber-700 disabled:opacity-50"
+              >
+                Pausar
+              </button>
+            )}
+            {a.estado === "PAUSADA" && (
+              <button
+                type="button"
+                onClick={() => iniciarToma(a.id)}
+                disabled={busy}
+                className="text-blue-600 disabled:opacity-50"
+              >
+                Reanudar
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => finalizarToma(a.id)}
+              disabled={busy}
+              className="text-green-700 disabled:opacity-50"
+            >
+              Finalizar
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  }
+
+  function renderTomaFinalizada(a: AsignacionItem) {
     const selected = selectedIds.has(a.id);
 
     return (
-      <li key={a.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-        <div className="flex items-start gap-3">
-          {selectable && (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => toggleSelected(a.id)}
-              className="mt-1 h-4 w-4 shrink-0"
-              aria-label={`Seleccionar ${a.area.nombre}`}
-            />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm text-slate-500">{a.area.punto}</p>
-                <p className="text-lg font-bold text-slate-900">{a.area.nombre}</p>
-                {isSupervisor && !a.esPropia && (
-                  <p className="mt-0.5 text-xs font-medium text-blue-600">
-                    Asignada a {a.usuarioNombre}
-                  </p>
-                )}
-                <p className="mt-1 text-sm text-slate-600">
-                  {a.conteosCount} productos contados
-                </p>
-              </div>
-              <EstadoBadge estado={a.estado} />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {allowManage && a.estado === "PENDIENTE" && (
-                <button
-                  type="button"
-                  onClick={() => iniciarToma(a.id)}
-                  disabled={busy}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {busy ? "Iniciando…" : "Iniciar toma"}
-                </button>
-              )}
-              {allowManage && a.estado === "EN_PROGRESO" && (
-                <>
-                  <Link
-                    href={`/tomador/area/${a.id}`}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Continuar conteo
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => pausarToma(a.id)}
-                    disabled={busy}
-                    className="rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-700 disabled:opacity-60"
-                  >
-                    Pausar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => finalizarToma(a.id)}
-                    disabled={busy}
-                    className="rounded-lg border border-green-600 px-4 py-2 text-sm font-semibold text-green-700 disabled:opacity-60"
-                  >
-                    Finalizar
-                  </button>
-                </>
-              )}
-              {allowManage && a.estado === "PAUSADA" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => iniciarToma(a.id)}
-                    disabled={busy}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    Reanudar
-                  </button>
-                  <Link
-                    href={`/tomador/area/${a.id}`}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-                  >
-                    Ver conteos
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => finalizarToma(a.id)}
-                    disabled={busy}
-                    className="rounded-lg border border-green-600 px-4 py-2 text-sm font-semibold text-green-700 disabled:opacity-60"
-                  >
-                    Finalizar
-                  </button>
-                </>
-              )}
-              {(!allowManage || a.estado === "COMPLETADA") && (
-                <Link
-                  href={`/tomador/area/${a.id}`}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-                >
-                  Ver conteos
-                </Link>
-              )}
-            </div>
-          </div>
+      <li key={a.id} className="flex items-center gap-3 rounded-lg px-1 py-2">
+        {isSupervisor && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => {
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(a.id)) next.delete(a.id);
+                else next.add(a.id);
+                return next;
+              });
+            }}
+            className="h-4 w-4 shrink-0"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-slate-800">{a.area.nombre}</p>
+          <p className="truncate text-xs text-slate-500">
+            {a.area.punto}
+            {isSupervisor && !a.esPropia ? ` · ${a.usuarioNombre}` : ""}
+          </p>
         </div>
+        <Link
+          href={`/tomador/area/${a.id}`}
+          className="shrink-0 text-sm text-blue-600"
+        >
+          Ver
+        </Link>
       </li>
     );
   }
 
   if (loading) {
-    return (
-      <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-        Cargando tomas…
-      </p>
-    );
+    return <p className="py-8 text-center text-sm text-slate-500">Cargando…</p>;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {message && (
-        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-800">{message}</div>
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{message}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="text-sm text-slate-600" htmlFor="fecha-filtro">
-          Fecha:
-        </label>
-        <input
-          id="fecha-filtro"
-          type="date"
-          value={fecha}
-          onChange={(e) => setFecha(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
-        {selectedIds.size > 0 && (
-          <button
-            type="button"
-            onClick={descargarSeleccionados}
-            disabled={exportando}
-            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {exportando
-              ? "Generando Excel…"
-              : `Descargar Excel (${selectedIds.size})`}
-          </button>
-        )}
-      </div>
+      <input
+        id="fecha-filtro"
+        type="date"
+        value={fecha}
+        onChange={(e) => setFecha(e.target.value)}
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      />
 
       {isSupervisor && (
         <Link
           href="/supervisor/tomas"
-          className="block rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-semibold text-blue-800"
+          className="block text-center text-sm font-medium text-blue-600"
         >
-          + Crear nueva toma de inventario
+          + Crear toma
         </Link>
       )}
 
       {asignaciones.length === 0 ? (
-        <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200">
-          <p className="text-lg font-medium text-slate-700">
-            {isSupervisor ? "Sin tomas en esta fecha" : "Sin tomas asignadas"}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            {isSupervisor
-              ? "Crea tomas desde el enlace de arriba o cambia la fecha."
-              : "El supervisor aún no te ha asignado tomas para esta fecha."}
-          </p>
-        </div>
+        <p className="rounded-xl bg-white px-4 py-8 text-center text-sm text-slate-500 ring-1 ring-slate-200">
+          {isSupervisor ? "Sin tomas en esta fecha" : "No tienes tomas asignadas"}
+        </p>
       ) : (
         <>
-          {enProgreso.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-600">
-                En progreso ({enProgreso.length})
-              </h2>
-              <ul className="space-y-3">{enProgreso.map((a) => renderToma(a, true))}</ul>
-            </section>
+          {activas.length > 0 && (
+            <ul className="space-y-2">{activas.map(renderTomaActiva)}</ul>
           )}
-          {pausadas.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Pausadas ({pausadas.length})
-              </h2>
-              <ul className="space-y-3">{pausadas.map((a) => renderToma(a, true))}</ul>
-            </section>
-          )}
-          {pendientes.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Pendientes ({pendientes.length})
-              </h2>
-              <ul className="space-y-3">{pendientes.map((a) => renderToma(a, true))}</ul>
-            </section>
-          )}
+
           {finalizadas.length > 0 && (
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-green-600">
-                  Finalizadas ({finalizadas.length})
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedIds.size === finalizadas.length) {
-                      setSelectedIds(new Set());
-                    } else {
-                      setSelectedIds(new Set(finalizadas.map((a) => a.id)));
-                    }
-                  }}
-                  className="text-xs font-medium text-blue-600"
-                >
-                  {selectedIds.size === finalizadas.length ? "Quitar selección" : "Seleccionar todas"}
-                </button>
-              </div>
-              <p className="mb-2 text-xs text-slate-500">
-                Marca una o más tomas y descarga un Excel consolidado con separadores entre cada conteo.
-              </p>
-              <ul className="space-y-3">{finalizadas.map((a) => renderToma(a, true))}</ul>
+            <section className="rounded-xl bg-white ring-1 ring-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowFinalizadas((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700"
+              >
+                Finalizadas ({finalizadas.length})
+                <span className="text-slate-400">{showFinalizadas ? "▲" : "▼"}</span>
+              </button>
+              {showFinalizadas && (
+                <ul className="border-t border-slate-100 px-3 pb-2">
+                  {finalizadas.map(renderTomaFinalizada)}
+                </ul>
+              )}
+              {isSupervisor && selectedIds.size > 0 && (
+                <div className="border-t border-slate-100 p-3">
+                  <button
+                    type="button"
+                    onClick={descargarSeleccionados}
+                    disabled={exportando}
+                    className="w-full rounded-lg border border-green-600 py-2 text-sm font-medium text-green-700 disabled:opacity-60"
+                  >
+                    {exportando ? "Generando…" : `Descargar Excel (${selectedIds.size})`}
+                  </button>
+                </div>
+              )}
             </section>
           )}
         </>

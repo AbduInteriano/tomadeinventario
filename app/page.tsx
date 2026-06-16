@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { Role } from "@prisma/client";
+import { homePathForRole } from "@/lib/roles";
 
 export default async function HomePage() {
   const session = await getSession();
@@ -9,9 +9,5 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  if (session.user.role === Role.SUPERVISOR) {
-    redirect("/supervisor");
-  }
-
-  redirect("/tomador");
+  redirect(homePathForRole(session.user.role));
 }

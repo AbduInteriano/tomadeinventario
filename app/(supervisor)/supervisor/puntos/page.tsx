@@ -2,12 +2,11 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { SupervisorNav } from "@/components/SupervisorNav";
 import { PuntosClient } from "@/components/PuntosClient";
-import { requireRole } from "@/lib/session";
+import { requireSupervisorAccess } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
 
 export default async function PuntosPage() {
-  const session = await requireRole(Role.SUPERVISOR);
+  const session = await requireSupervisorAccess();
 
   const puntos = await prisma.punto.findMany({
     where: { activo: true },

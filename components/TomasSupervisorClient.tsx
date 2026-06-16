@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FlashMessage } from "@/components/FlashMessage";
 import { EstadoBadge } from "@/components/AppHeader";
+import { roleLabel } from "@/lib/roles";
+import { Role } from "@prisma/client";
 
 interface TomaItem {
   id: string;
@@ -240,7 +242,7 @@ export function TomasSupervisorClient() {
             {usuarios.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.nombre}
-                {u.role === "SUPERVISOR" ? " (Supervisor)" : ""}
+                {u.role !== Role.TOMADOR ? ` (${roleLabel(u.role as Role)})` : ""}
               </option>
             ))}
           </select>

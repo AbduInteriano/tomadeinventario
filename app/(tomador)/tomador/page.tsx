@@ -2,21 +2,21 @@ import Link from "next/link";
 import { requireConteoRole } from "@/lib/session";
 import { AppHeader } from "@/components/AppHeader";
 import { TomadorDashboardClient } from "@/components/TomadorDashboardClient";
-import { Role } from "@prisma/client";
+import { canAccessSupervisor } from "@/lib/roles";
 
 export default async function TomadorDashboardPage() {
   const session = await requireConteoRole();
-  const isSupervisor = session.user.role === Role.SUPERVISOR;
+  const isStaffView = canAccessSupervisor(session.user.role);
 
   return (
     <>
       <AppHeader
-        title={isSupervisor ? "Conteo — todas las tomas" : "Mis tomas"}
+        title={isStaffView ? "Conteo — todas las tomas" : "Mis tomas"}
         subtitle={session.user.name ?? undefined}
       />
 
       <main className="mx-auto max-w-lg px-4 py-4">
-        {isSupervisor && (
+        {isStaffView && (
           <Link
             href="/supervisor"
             className="mb-4 inline-block text-sm font-medium text-blue-600 active:text-blue-800"
@@ -25,7 +25,7 @@ export default async function TomadorDashboardPage() {
           </Link>
         )}
 
-        <TomadorDashboardClient isSupervisor={isSupervisor} />
+        <TomadorDashboardClient isSupervisor={isStaffView} />
       </main>
     </>
   );

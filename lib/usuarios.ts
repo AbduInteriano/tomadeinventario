@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isAdminTecnologia } from "@/lib/roles";
 import { normalizeNombre } from "@/lib/api-auth";
 
 const PASSWORD_CHARS =
@@ -15,7 +16,7 @@ export function generatePassword(length = 10): string {
 }
 
 export function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase();
+  return username.trim();
 }
 
 export function validateUsername(username: string): string | null {
@@ -23,8 +24,11 @@ export function validateUsername(username: string): string | null {
   if (!normalized) return "El usuario es obligatorio";
   if (normalized.length < 3) return "El usuario debe tener al menos 3 caracteres";
   if (normalized.length > 64) return "El usuario no puede superar 64 caracteres";
-  if (!/^[a-z0-9._-]+$/.test(normalized)) {
-    return "Solo letras, números, puntos, guiones y guión bajo";
+  if (/\s/.test(normalized)) {
+    return "El usuario no puede contener espacios";
+  }
+  if (!/^[\w.@+-]+$/.test(normalized)) {
+    return "Caracteres permitidos: letras, números y . @ + - _";
   }
   return null;
 }
@@ -51,9 +55,10 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function findUsernameDuplicado(username: string, excludeId?: string) {
+  const normalized = normalizeUsername(username);
   return prisma.user.findFirst({
     where: {
-      username: { equals: normalizeUsername(username), mode: "insensitive" },
+      username: { equals: normalized, mode: "insensitive" },
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
   });
@@ -85,6 +90,10 @@ export async function assertPuedeDesactivar(
 ): Promise<{ error?: string }> {
   const user = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!user) return { error: "Usuario no encontrado" };
+
+  if (isAdminTecnologia(user.role) && user.activo && targetUserId !== sessionUserId) {
+    return { error: "No se puede desactivar al administrador de tecnología" };
+  }
 
   if (user.role === Role.SUPERVISOR && user.activo) {
     const otrosActivos = await countSupervisoresActivos(targetUserId);

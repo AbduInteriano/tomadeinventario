@@ -1,34 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSupervisorApi, normalizeNombre } from "@/lib/api-auth";
+import { requireStaffApi } from "@/lib/api-auth";
 import {
   findUsernameDuplicado,
   hashPassword,
   normalizeUsername,
   serializeUsuario,
-  validateNombreUsuario,
   validatePassword,
   validateUsername,
 } from "@/lib/usuarios";
+import { puedeCrearRol } from "@/lib/roles";
 
 export async function GET() {
-  const auth = await requireSupervisorApi();
+  const auth = await requireStaffApi();
   if ("error" in auth) return auth.error;
 
   const usuarios = await prisma.user.findMany({
-    orderBy: [{ activo: "desc" }, { nombre: "asc" }],
+    orderBy: [{ activo: "desc" }, { username: "asc" }],
   });
 
   return NextResponse.json(usuarios.map(serializeUsuario));
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireSupervisorApi();
+  const auth = await requireStaffApi();
   if ("error" in auth) return auth.error;
 
   let body: {
-    nombre?: string;
     username?: string;
     password?: string;
     role?: string;
@@ -38,11 +37,6 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-
-  const nombreError = validateNombreUsuario(body.nombre ?? "");
-  if (nombreError) {
-    return NextResponse.json({ error: nombreError }, { status: 400 });
   }
 
   const usernameError = validateUsername(body.username ?? "");
@@ -55,20 +49,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: passwordError }, { status: 400 });
   }
 
-  const role = body.role === Role.SUPERVISOR ? Role.SUPERVISOR : Role.TOMADOR;
+  let role: Role = Role.TOMADOR;
+  if (body.role === Role.SUPERVISOR) role = Role.SUPERVISOR;
+  else if (body.role === Role.ADMIN_TECNOLOGIA) role = Role.ADMIN_TECNOLOGIA;
+  else if (body.role === Role.TOMADOR) role = Role.TOMADOR;
+
+  if (!puedeCrearRol(auth.session.user.role, role)) {
+    return NextResponse.json(
+      { error: "No tienes permiso para crear usuarios con ese rol" },
+      { status: 403 }
+    );
+  }
+
   const username = normalizeUsername(body.username!);
-  const nombre = normalizeNombre(body.nombre!);
 
   const duplicado = await findUsernameDuplicado(username);
   if (duplicado) {
-    return NextResponse.json({ error: "Ya existe un usuario con ese nombre de usuario" }, { status: 409 });
+    return NextResponse.json({ error: "Ya existe un usuario con ese nombre" }, { status: 409 });
   }
 
   const passwordHash = await hashPassword(body.password!);
 
   const usuario = await prisma.user.create({
     data: {
-      nombre,
+      nombre: username,
       username,
       password: passwordHash,
       role,

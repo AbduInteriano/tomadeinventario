@@ -6,7 +6,8 @@ import { decimalToNumber } from "@/lib/inventario";
 import { canViewAsignacion } from "@/lib/tomas";
 import { AppHeader, EstadoBadge } from "@/components/AppHeader";
 import { ConteoAreaClient } from "@/components/ConteoAreaClient";
-import { AsignacionEstado, Role } from "@prisma/client";
+import { canAccessSupervisor } from "@/lib/roles";
+import { AsignacionEstado } from "@prisma/client";
 
 export default async function ConteoAreaPage({
   params,
@@ -86,7 +87,7 @@ export default async function ConteoAreaPage({
           ← Volver
         </Link>
         <EstadoBadge estado={asignacion.estado} />
-        {!esPropia && session.user.role === Role.SUPERVISOR && (
+        {!esPropia && canAccessSupervisor(session.user.role) && (
           <span className="text-xs text-slate-500">
             Asignada a {asignacion.usuario?.nombre ?? "sin usuario"}
           </span>

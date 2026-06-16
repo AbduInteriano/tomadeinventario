@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { Role } from "@prisma/client";
+import { canAccessSupervisor, canManageUsers } from "@/lib/roles";
 
 export async function requireSupervisorApi() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return { error: NextResponse.json({ error: "No autorizado" }, { status: 401 }) };
   }
-  if (session.user.role !== Role.SUPERVISOR) {
+  if (!canAccessSupervisor(session.user.role)) {
+    return { error: NextResponse.json({ error: "Acceso denegado" }, { status: 403 }) };
+  }
+  return { session };
+}
+
+export async function requireStaffApi() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return { error: NextResponse.json({ error: "No autorizado" }, { status: 401 }) };
+  }
+  if (!canManageUsers(session.user.role)) {
     return { error: NextResponse.json({ error: "Acceso denegado" }, { status: 403 }) };
   }
   return { session };

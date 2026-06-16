@@ -44,7 +44,7 @@ export async function canViewAsignacion(
     return { error: "Toma no encontrada", status: 404 as const };
   }
 
-  if (role === Role.SUPERVISOR) {
+  if (role === Role.SUPERVISOR || role === Role.ADMIN_TECNOLOGIA) {
     return { asignacion, canWrite: asignacion.usuarioId === userId };
   }
 
