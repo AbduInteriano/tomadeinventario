@@ -162,78 +162,6 @@ export function productoDataChanged(
   );
 }
 
-export async function previewImportRows(rows: unknown[][]) {
-  let creados = 0;
-  let modificados = 0;
-  let sinCambios = 0;
-  const errores: { fila: number; motivo: string }[] = [];
-
-  const [unidadesDb, categoriasDb] = await Promise.all([
-    prisma.unidadMedida.findMany({ where: { activo: true } }),
-    prisma.categoria.findMany({ where: { activo: true } }),
-  ]);
-
-  const unidadMap = new Map(
-    unidadesDb.map((u) => [u.abreviatura.toUpperCase(), u])
-  );
-  const categoriaMap = new Map(
-    categoriasDb.map((c) => [normalizeNombre(c.nombre).toLowerCase(), c])
-  );
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const fila = i + 2;
-
-    const abreviatura = cellToString(row[3]) || "UN";
-    const categoriaNombre = cellToString(row[4]) || null;
-
-    const unidad = unidadMap.get(abreviatura.toUpperCase());
-    if (!unidad) {
-      errores.push({ fila, motivo: `Unidad "${abreviatura}" no existe` });
-      continue;
-    }
-
-    let categoriaId: string | null = null;
-    if (categoriaNombre) {
-      const categoria = categoriaMap.get(normalizeNombre(categoriaNombre).toLowerCase());
-      if (!categoria) {
-        errores.push({ fila, motivo: `Categoría "${categoriaNombre}" no existe` });
-        continue;
-      }
-      categoriaId = categoria.id;
-    }
-
-    const validated = validateProductoInput({
-      codigoBarras: cellToString(row[0]),
-      codigoArticulo: cellToString(row[1]) || null,
-      descripcion: cellToString(row[2]),
-      unidadMedidaId: unidad.id,
-      categoriaId,
-    });
-
-    if (validated.error || !validated.data) {
-      errores.push({ fila, motivo: validated.error ?? "Datos inválidos" });
-      continue;
-    }
-
-    const existing = await prisma.producto.findFirst({
-      where: {
-        codigoBarras: { equals: validated.data.codigoBarras, mode: "insensitive" },
-      },
-    });
-
-    if (!existing) {
-      creados++;
-    } else if (productoDataChanged(existing, validated.data)) {
-      modificados++;
-    } else {
-      sinCambios++;
-    }
-  }
-
-  return { creados, modificados, sinCambios, errores, totalFilas: rows.length };
-}
-
 export function normalizeExcelHeader(value: unknown): string {
   return String(value ?? "")
     .trim()
@@ -249,10 +177,21 @@ export function validateExcelHeaders(row: unknown[]): boolean {
     col1 === normalizeExcelHeader("Código Artículo") ||
     col1 === normalizeExcelHeader("Código Interno");
   if (!col1Ok) return false;
-  return EXCEL_HEADERS.every((expected, i) => {
-    if (i === 1) return true;
-    return normalizeExcelHeader(row[i]) === normalizeExcelHeader(expected);
-  });
+
+  const col3 = normalizeExcelHeader(row[3]);
+  const col3Ok =
+    col3 === normalizeExcelHeader("Unidad") ||
+    col3 === normalizeExcelHeader("Unidad de medida");
+  if (!col3Ok) return false;
+
+  const col0 = normalizeExcelHeader(row[0]);
+  const col2 = normalizeExcelHeader(row[2]);
+  const col4 = normalizeExcelHeader(row[4]);
+  if (col0 !== normalizeExcelHeader("Código Barras")) return false;
+  if (col2 !== normalizeExcelHeader("Descripción")) return false;
+  if (col4 !== normalizeExcelHeader("Categoría")) return false;
+
+  return true;
 }
 
 export function cellToString(value: unknown): string {

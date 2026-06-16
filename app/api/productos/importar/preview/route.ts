@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSupervisorApi } from "@/lib/api-auth";
 import { parseProductoExcel } from "@/lib/excel-productos";
-import { previewImportRows, validateExcelHeaders } from "@/lib/productos";
+import { previewProductoImport } from "@/lib/productos-import";
+import { validateExcelHeaders } from "@/lib/productos";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_ROWS = 10_000;
 
 export async function POST(request: NextRequest) {
   const auth = await requireSupervisorApi();
@@ -21,10 +26,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Archivo requerido" }, { status: 400 });
   }
 
-  const MAX_BYTES = 10 * 1024 * 1024;
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
-      { error: "El archivo supera el límite de 10 MB" },
+      { error: "El archivo supera el límite de 20 MB" },
       { status: 400 }
     );
   }
@@ -41,12 +45,22 @@ export async function POST(request: NextRequest) {
 
   if (!validateExcelHeaders(parsed.headers)) {
     return NextResponse.json(
-      { error: "Plantilla inválida. Descarga la plantilla oficial." },
+      {
+        error:
+          "Plantilla inválida. Descarga la plantilla oficial y usa la hoja Productos.",
+      },
       { status: 400 }
     );
   }
 
-  const preview = await previewImportRows(parsed.rows);
+  if (parsed.rows.length > MAX_ROWS) {
+    return NextResponse.json(
+      { error: `Máximo ${MAX_ROWS.toLocaleString("es-AR")} filas por archivo` },
+      { status: 400 }
+    );
+  }
+
+  const preview = await previewProductoImport(parsed.rows);
 
   return NextResponse.json(preview);
 }

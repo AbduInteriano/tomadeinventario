@@ -41,9 +41,10 @@ interface ImportPreview {
   sinCambios: number;
   errores: { fila: number; motivo: string }[];
   totalFilas: number;
+  filasValidas: number;
 }
 
-type ImportResult = ImportPreview;
+type ImportResult = ImportPreview & { actualizados?: number };
 
 type Flash = { type: "success" | "error"; message: string } | null;
 
@@ -224,9 +225,20 @@ export function ProductosClient() {
       return;
     }
 
+    setImportPreview(preview);
+
+    if ((preview.filasValidas ?? 0) === 0) {
+      setFlash({
+        type: "error",
+        message:
+          "Ninguna fila cumple los requisitos. Registra categorías y unidades en Catálogo y revisa la plantilla.",
+      });
+      return;
+    }
+
+    setPendingImportFile(file);
+
     if (preview.modificados > 0) {
-      setImportPreview(preview);
-      setPendingImportFile(file);
       return;
     }
 
@@ -298,7 +310,8 @@ export function ProductosClient() {
         href="/supervisor/catalogo"
         className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
       >
-        Gestionar <span className="font-semibold">categorías y unidades</span> →
+        Antes de importar Excel: crea todas las{" "}
+        <span className="font-semibold">categorías y unidades</span> en Catálogo →
       </Link>
 
       <input
@@ -348,9 +361,25 @@ export function ProductosClient() {
         <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
           <h3 className="font-bold text-slate-900">Importación completada</h3>
           <p className="mt-2 text-sm text-slate-600">
-            {importResult.creados} creados · {importResult.modificados} actualizados ·{" "}
-            {importResult.errores.length} errores
+            {importResult.creados} creados ·{" "}
+            {importResult.actualizados ?? importResult.modificados} actualizados ·{" "}
+            {importResult.sinCambios} sin cambios · {importResult.errores.length} fila(s) con
+            error
           </p>
+          <ImportErroresList errores={importResult.errores} />
+        </div>
+      )}
+
+      {importPreview && importPreview.errores.length > 0 && !importResult && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="text-sm font-semibold text-amber-900">
+            Vista previa — {importPreview.errores.length} fila(s) con error
+          </h3>
+          <p className="mt-1 text-xs text-amber-800">
+            Se importarán {importPreview.filasValidas} de {importPreview.totalFilas} filas si
+            continúas.
+          </p>
+          <ImportErroresList errores={importPreview.errores} />
         </div>
       )}
 
@@ -469,11 +498,11 @@ export function ProductosClient() {
       )}
 
       <ConfirmDialog
-        open={!!importPreview && importPreview.modificados > 0}
-        title="Confirmar actualización"
+        open={!!importPreview && !!pendingImportFile && importPreview.modificados > 0}
+        title="Confirmar importación"
         message={
           importPreview
-            ? `Se crearán ${importPreview.creados} producto(s) nuevo(s) y se modificarán ${importPreview.modificados} existente(s). ${importPreview.sinCambios} fila(s) sin cambios. ¿Continuar?`
+            ? `Se crearán ${importPreview.creados} producto(s) nuevo(s) y se actualizarán ${importPreview.modificados} existente(s). ${importPreview.sinCambios} sin cambios.${importPreview.errores.length > 0 ? ` ${importPreview.errores.length} fila(s) se omitirán por error.` : ""} ¿Continuar?`
             : ""
         }
         confirmLabel="Importar"
@@ -493,6 +522,42 @@ export function ProductosClient() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+function ImportErroresList({
+  errores,
+}: {
+  errores: { fila: number; motivo: string }[];
+}) {
+  if (errores.length === 0) return null;
+
+  const visibles = errores.slice(0, 25);
+
+  return (
+    <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+      <table className="w-full text-left text-xs">
+        <thead className="sticky top-0 bg-slate-50 text-slate-600">
+          <tr>
+            <th className="px-3 py-2 font-medium">Fila</th>
+            <th className="px-3 py-2 font-medium">Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visibles.map((e) => (
+            <tr key={`${e.fila}-${e.motivo}`} className="border-t border-slate-100">
+              <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-700">{e.fila}</td>
+              <td className="px-3 py-2 text-slate-600">{e.motivo}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {errores.length > 25 && (
+        <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+          … y {errores.length - 25} error(es) más
+        </p>
+      )}
     </div>
   );
 }
