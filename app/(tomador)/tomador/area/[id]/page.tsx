@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireConteoRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad } from "@/lib/cantidad";
 import { canViewAsignacion } from "@/lib/tomas";
 import { AppHeader, EstadoBadge } from "@/components/AppHeader";
 import { ConteoAreaClient } from "@/components/ConteoAreaClient";
@@ -109,14 +109,14 @@ export default async function ConteoAreaPage({
           codigoBarras: c.producto.codigoBarras,
           descripcion: c.producto.descripcion,
           unidadMedida: c.producto.unidadMedida.abreviatura,
-          cantidadContada: decimalToNumber(c.cantidadContada),
+          cantidadContada: formatCantidad(c.cantidadContada),
           timestamp: c.timestamp.toISOString(),
         }))}
         noCatalogadosIniciales={noCatalogados.map((n) => ({
           id: n.id,
           codigoEscaneado: n.codigoEscaneado,
           descripcionLibre: n.descripcionLibre,
-          cantidad: decimalToNumber(n.cantidad),
+          cantidad: formatCantidad(n.cantidad),
           timestamp: n.timestamp.toISOString(),
         }))}
       />

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad, parseCantidadBody } from "@/lib/cantidad";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
 import { assertLineaNoCatalogadoEditable } from "@/lib/conteo-linea";
 import { Prisma } from "@prisma/client";
@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const auth = await requireConteoSessionApi();
   if ("error" in auth) return auth.error;
 
-  let body: { cantidad?: number; descripcionLibre?: string };
+  let body: { cantidad?: string | number; descripcionLibre?: string };
   try {
     body = await request.json();
   } catch {
@@ -26,13 +26,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const data: { cantidad?: Prisma.Decimal; descripcionLibre?: string } = {};
 
   if (body.cantidad != null) {
-    if (typeof body.cantidad !== "number" || body.cantidad <= 0 || !Number.isFinite(body.cantidad)) {
-      return NextResponse.json(
-        { error: "La cantidad debe ser un número mayor a 0" },
-        { status: 400 }
-      );
+    const parsedCantidad = parseCantidadBody(body.cantidad);
+    if ("error" in parsedCantidad) {
+      return NextResponse.json({ error: parsedCantidad.error }, { status: 400 });
     }
-    data.cantidad = new Prisma.Decimal(body.cantidad);
+    data.cantidad = parsedCantidad.decimal;
   }
 
   if (body.descripcionLibre != null) {
@@ -57,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       id: updated.id,
       codigoEscaneado: updated.codigoEscaneado,
       descripcionLibre: updated.descripcionLibre,
-      cantidad: decimalToNumber(updated.cantidad),
+      cantidad: formatCantidad(updated.cantidad),
       timestamp: updated.timestamp,
     });
   } catch (err) {

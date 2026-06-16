@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { validateCantidadInput } from "@/lib/cantidad-input";
 
 interface ProductoEncontrado {
   id: string;
@@ -18,7 +19,7 @@ interface ConteoItem {
   codigoBarras: string;
   descripcion: string;
   unidadMedida: string;
-  cantidadContada: number;
+  cantidadContada: string;
   timestamp: string;
 }
 
@@ -26,7 +27,7 @@ interface NoCatalogadoItem {
   id: string;
   codigoEscaneado: string;
   descripcionLibre: string;
-  cantidad: number;
+  cantidad: string;
   timestamp: string;
 }
 
@@ -227,9 +228,9 @@ export function ConteoAreaClient({
 
   async function guardarConteo() {
     if (!pending) return;
-    const qty = parseFloat(cantidad.replace(",", "."));
-    if (!qty || qty <= 0) {
-      setMessage({ type: "err", text: "Ingresa una cantidad válida mayor a 0" });
+    const parsed = validateCantidadInput(cantidad);
+    if (!parsed.ok) {
+      setMessage({ type: "err", text: parsed.error });
       return;
     }
 
@@ -246,7 +247,7 @@ export function ConteoAreaClient({
           body: JSON.stringify({
             asignacionId,
             productoId: producto.id,
-            cantidad: qty,
+            cantidad: parsed.normalized,
           }),
         });
 
@@ -287,7 +288,7 @@ export function ConteoAreaClient({
             asignacionId,
             codigoEscaneado: pending.codigo,
             descripcionLibre: descripcionLibre.trim(),
-            cantidad: qty,
+            cantidad: parsed.normalized,
           }),
         });
 
@@ -328,13 +329,13 @@ export function ConteoAreaClient({
       setEditing({
         kind: "catalogado",
         id: linea.item.id,
-        cantidad: String(linea.item.cantidadContada),
+        cantidad: linea.item.cantidadContada,
       });
     } else {
       setEditing({
         kind: "no-catalogado",
         id: linea.item.id,
-        cantidad: String(linea.item.cantidad),
+        cantidad: linea.item.cantidad,
         descripcion: linea.item.descripcionLibre,
       });
     }
@@ -342,9 +343,9 @@ export function ConteoAreaClient({
 
   async function guardarEdicion() {
     if (!editing) return;
-    const qty = parseFloat(editing.cantidad.replace(",", "."));
-    if (!qty || qty <= 0) {
-      setMessage({ type: "err", text: "Ingresa una cantidad válida mayor a 0" });
+    const parsed = validateCantidadInput(editing.cantidad);
+    if (!parsed.ok) {
+      setMessage({ type: "err", text: parsed.error });
       return;
     }
 
@@ -356,7 +357,7 @@ export function ConteoAreaClient({
         const res = await fetch(`/api/conteos/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cantidad: qty }),
+          body: JSON.stringify({ cantidad: parsed.normalized }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -387,7 +388,7 @@ export function ConteoAreaClient({
         const res = await fetch(`/api/conteos/no-catalogado/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cantidad: qty, descripcionLibre: desc }),
+          body: JSON.stringify({ cantidad: parsed.normalized, descripcionLibre: desc }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -510,10 +511,9 @@ export function ConteoAreaClient({
             <p className="text-xs text-slate-500">{c.codigoBarras}</p>
             <div className="mt-2 flex items-center gap-2">
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0.001"
-                step="any"
+                placeholder="0.5"
                 value={editing.cantidad}
                 onChange={(e) => setEditing({ ...editing, cantidad: e.target.value })}
                 className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold"
@@ -587,10 +587,9 @@ export function ConteoAreaClient({
           />
           <div className="mt-2 flex items-center gap-2">
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              min="0.001"
-              step="any"
+              placeholder="0.5"
               value={editing.cantidad}
               onChange={(e) => setEditing({ ...editing, cantidad: e.target.value })}
               className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold"
@@ -804,10 +803,9 @@ export function ConteoAreaClient({
 
             <div className="mt-2 flex items-center gap-2">
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0.001"
-                step="any"
+                placeholder="1 o 0,5"
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
                 className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-base font-semibold"

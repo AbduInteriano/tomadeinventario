@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { assertAsignacionAccess, decimalToNumber } from "@/lib/inventario";
+import { assertAsignacionAccess } from "@/lib/inventario";
+import { formatCantidad, parseCantidadBody } from "@/lib/cantidad";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
-import { AsignacionEstado, Prisma } from "@prisma/client";
+import { AsignacionEstado } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   const auth = await requireConteoSessionApi();
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     asignacionId: string;
     codigoEscaneado: string;
     descripcionLibre: string;
-    cantidad: number;
+    cantidad: string | number;
   };
 
   try {
@@ -32,11 +33,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (typeof cantidad !== "number" || cantidad <= 0 || !Number.isFinite(cantidad)) {
-    return NextResponse.json(
-      { error: "La cantidad debe ser un número mayor a 0" },
-      { status: 400 }
-    );
+  const parsedCantidad = parseCantidadBody(cantidad);
+  if ("error" in parsedCantidad) {
+    return NextResponse.json({ error: parsedCantidad.error }, { status: 400 });
   }
 
   const access = await assertAsignacionAccess(asignacionId, session.user.id, {
@@ -46,7 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
-  const cantidadDecimal = new Prisma.Decimal(cantidad);
+  const cantidadDecimal = parsedCantidad.decimal;
   const descripcion = descripcionLibre.trim();
 
   try {
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest) {
       id: registro.id,
       codigoEscaneado: registro.codigoEscaneado,
       descripcionLibre: registro.descripcionLibre,
-      cantidad: decimalToNumber(registro.cantidad),
+      cantidad: formatCantidad(registro.cantidad),
       timestamp: registro.timestamp,
     });
   } catch (err) {

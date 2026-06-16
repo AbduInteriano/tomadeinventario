@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad } from "@/lib/cantidad";
 
 export const CONTEO_EXCEL_HEADERS = [
   "Código de barras",
@@ -52,7 +52,7 @@ function addConteoRows(sheet: ExcelJS.Worksheet, conteos: ConteoExportRow[]) {
       c.codigoArticulo ?? "",
       c.descripcion,
       c.unidadMedida,
-      decimalToNumber(c.cantidadContada),
+      formatCantidad(c.cantidadContada),
     ]);
   }
 }
@@ -80,7 +80,7 @@ function addNoCatalogadoRows(sheet: ExcelJS.Worksheet, rows: NoCatalogadoExportR
     sheet.addRow([
       n.codigoEscaneado,
       n.descripcionLibre,
-      decimalToNumber(n.cantidad),
+      formatCantidad(n.cantidad),
     ]);
   }
 }
@@ -135,10 +135,13 @@ export async function createConsolidatedConteoExportBuffer(
     });
   }
 
-  sheet.columns.forEach((col) => {
+  (sheet.columns ?? []).forEach((col) => {
     col.width = 22;
   });
-  noCatSheet.columns.forEach((col) => {
+  if ((noCatSheet.rowCount ?? 0) === 0) {
+    addNoCatalogadoHeader(noCatSheet);
+  }
+  (noCatSheet.columns ?? []).forEach((col) => {
     col.width = 24;
   });
 

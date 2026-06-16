@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad, parseCantidadBody } from "@/lib/cantidad";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
-import { AsignacionEstado, Prisma } from "@prisma/client";
+import { AsignacionEstado } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   const auth = await requireConteoSessionApi();
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   let body: {
     asignacionId: string;
     productoId: string;
-    cantidad: number;
+    cantidad: string | number;
   };
 
   try {
@@ -30,14 +30,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (typeof cantidad !== "number" || cantidad <= 0 || !Number.isFinite(cantidad)) {
-    return NextResponse.json(
-      { error: "La cantidad debe ser un número mayor a 0" },
-      { status: 400 }
-    );
+  const parsedCantidad = parseCantidadBody(cantidad);
+  if ("error" in parsedCantidad) {
+    return NextResponse.json({ error: parsedCantidad.error }, { status: 400 });
   }
 
-  const cantidadDecimal = new Prisma.Decimal(cantidad);
+  const cantidadDecimal = parsedCantidad.decimal;
 
   try {
     const conteo = await prisma.$transaction(async (tx) => {
@@ -107,7 +105,7 @@ export async function POST(request: NextRequest) {
       codigoBarras: conteo.producto.codigoBarras,
       descripcion: conteo.producto.descripcion,
       unidadMedida: conteo.producto.unidadMedida.abreviatura,
-      cantidadContada: decimalToNumber(conteo.cantidadContada),
+      cantidadContada: formatCantidad(conteo.cantidadContada),
       timestamp: conteo.timestamp,
     });
   } catch (err) {

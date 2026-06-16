@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad, parseCantidadBody } from "@/lib/cantidad";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
 import { assertLineaConteoEditable } from "@/lib/conteo-linea";
-import { Prisma } from "@prisma/client";
 
 type RouteParams = { params: { id: string } };
 
@@ -11,7 +10,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const auth = await requireConteoSessionApi();
   if ("error" in auth) return auth.error;
 
-  let body: { cantidad?: number };
+  let body: { cantidad?: string | number };
   try {
     body = await request.json();
   } catch {
@@ -19,11 +18,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 
   const { cantidad } = body;
-  if (typeof cantidad !== "number" || cantidad <= 0 || !Number.isFinite(cantidad)) {
+  if (cantidad == null) {
     return NextResponse.json(
       { error: "La cantidad debe ser un número mayor a 0" },
       { status: 400 }
     );
+  }
+
+  const parsedCantidad = parseCantidadBody(cantidad);
+  if ("error" in parsedCantidad) {
+    return NextResponse.json({ error: parsedCantidad.error }, { status: 400 });
   }
 
   const access = await assertLineaConteoEditable(params.id, auth.session.user.id);
@@ -34,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const updated = await prisma.conteoInventario.update({
       where: { id: params.id },
-      data: { cantidadContada: new Prisma.Decimal(cantidad) },
+      data: { cantidadContada: parsedCantidad.decimal },
       select: {
         id: true,
         productoId: true,
@@ -56,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       codigoBarras: updated.producto.codigoBarras,
       descripcion: updated.producto.descripcion,
       unidadMedida: updated.producto.unidadMedida.abreviatura,
-      cantidadContada: decimalToNumber(updated.cantidadContada),
+      cantidadContada: formatCantidad(updated.cantidadContada),
       timestamp: updated.timestamp,
     });
   } catch (err) {

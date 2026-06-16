@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decimalToNumber } from "@/lib/inventario";
+import { formatCantidad } from "@/lib/cantidad";
 import { requireConteoSessionApi } from "@/lib/conteo-auth";
 import { canViewAsignacion } from "@/lib/tomas";
 
@@ -74,14 +74,14 @@ export async function GET(
       codigoBarras: c.producto.codigoBarras,
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
-      cantidadContada: decimalToNumber(c.cantidadContada),
+      cantidadContada: formatCantidad(c.cantidadContada),
       timestamp: c.timestamp,
     })),
     noCatalogados: noCatalogados.map((n) => ({
       id: n.id,
       codigoEscaneado: n.codigoEscaneado,
       descripcionLibre: n.descripcionLibre,
-      cantidad: decimalToNumber(n.cantidad),
+      cantidad: formatCantidad(n.cantidad),
       timestamp: n.timestamp,
     })),
   });
