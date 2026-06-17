@@ -38,6 +38,57 @@ type CatalogMaps = {
   categoriaByNombre: Map<string, { id: string; nombre: string }>;
 };
 
+type ExistingProduct = {
+  id: string;
+  codigoBarras: string;
+  codigoArticulo: string | null;
+  descripcion: string;
+  unidadMedidaId: string;
+  categoriaId: string | null;
+  activo: boolean;
+};
+
+type ExistingProductIndex = {
+  byBarcode: Map<string, ExistingProduct>;
+  byArticulo: Map<string, ExistingProduct>;
+};
+
+const existingProductSelect = {
+  id: true,
+  codigoBarras: true,
+  codigoArticulo: true,
+  descripcion: true,
+  unidadMedidaId: true,
+  categoriaId: true,
+  activo: true,
+} as const;
+
+function indexExistingProduct(
+  index: ExistingProductIndex,
+  product: ExistingProduct
+) {
+  index.byBarcode.set(product.codigoBarras.toLowerCase(), product);
+  const articulo = product.codigoArticulo?.trim();
+  if (articulo) {
+    index.byArticulo.set(articulo.toLowerCase(), product);
+  }
+}
+
+function findExistingProduct(
+  row: ParsedImportRow,
+  index: ExistingProductIndex
+): ExistingProduct | undefined {
+  const byBarcode = index.byBarcode.get(row.codigoBarras.toLowerCase());
+  if (byBarcode) return byBarcode;
+
+  const articulo = row.codigoArticulo?.trim();
+  if (articulo) {
+    return index.byArticulo.get(articulo.toLowerCase());
+  }
+
+  return undefined;
+}
+
 export async function loadImportCatalogMaps(): Promise<CatalogMaps> {
   const [unidadesDb, categoriasDb] = await Promise.all([
     prisma.unidadMedida.findMany({
@@ -136,6 +187,7 @@ function parseAllRows(rows: unknown[][], maps: CatalogMaps) {
   const errores: ImportRowError[] = [];
   const validRows: ParsedImportRow[] = [];
   const seenBarcodes = new Map<string, number>();
+  const seenArticulos = new Map<string, number>();
 
   for (let i = 0; i < rows.length; i++) {
     const fila = i + 2;
@@ -146,79 +198,88 @@ function parseAllRows(rows: unknown[][], maps: CatalogMaps) {
       continue;
     }
 
-    const key = resolved.data.codigoBarras.toLowerCase();
-    const prevFila = seenBarcodes.get(key);
-    if (prevFila != null) {
+    const barcodeKey = resolved.data.codigoBarras.toLowerCase();
+    const prevBarcodeFila = seenBarcodes.get(barcodeKey);
+    if (prevBarcodeFila != null) {
       errores.push({
         fila,
-        motivo: `Código de barras duplicado en el archivo (ya aparece en fila ${prevFila})`,
+        motivo: `Código de barras duplicado en el archivo (ya aparece en fila ${prevBarcodeFila})`,
       });
       continue;
     }
-    seenBarcodes.set(key, fila);
+
+    const articulo = resolved.data.codigoArticulo?.trim();
+    if (articulo) {
+      const articuloKey = articulo.toLowerCase();
+      const prevArticuloFila = seenArticulos.get(articuloKey);
+      if (prevArticuloFila != null) {
+        errores.push({
+          fila,
+          motivo: `Código artículo duplicado en el archivo (ya aparece en fila ${prevArticuloFila})`,
+        });
+        continue;
+      }
+      seenArticulos.set(articuloKey, fila);
+    }
+
+    seenBarcodes.set(barcodeKey, fila);
     validRows.push(resolved.data);
   }
 
   return { validRows, errores };
 }
 
-async function loadExistingByBarcodes(barcodes: string[]) {
-  const map = new Map<
-    string,
-    {
-      id: string;
-      codigoBarras: string;
-      codigoArticulo: string | null;
-      descripcion: string;
-      unidadMedidaId: string;
-      categoriaId: string | null;
-      activo: boolean;
-    }
-  >();
+async function loadExistingForImport(validRows: ParsedImportRow[]) {
+  const index: ExistingProductIndex = {
+    byBarcode: new Map(),
+    byArticulo: new Map(),
+  };
 
-  const unique = Array.from(new Set(barcodes));
-  for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
-    const chunk = unique.slice(i, i + LOOKUP_CHUNK);
+  const barcodes = Array.from(new Set(validRows.map((r) => r.codigoBarras)));
+  for (let i = 0; i < barcodes.length; i += LOOKUP_CHUNK) {
+    const chunk = barcodes.slice(i, i + LOOKUP_CHUNK);
     const found = await prisma.producto.findMany({
       where: {
         OR: chunk.map((codigoBarras) => ({
           codigoBarras: { equals: codigoBarras, mode: "insensitive" as const },
         })),
       },
-      select: {
-        id: true,
-        codigoBarras: true,
-        codigoArticulo: true,
-        descripcion: true,
-        unidadMedidaId: true,
-        categoriaId: true,
-        activo: true,
-      },
+      select: existingProductSelect,
     });
 
-    for (const p of found) {
-      map.set(p.codigoBarras.toLowerCase(), p);
+    for (const product of found) {
+      indexExistingProduct(index, product);
     }
   }
 
-  return map;
+  const articulos = Array.from(
+    new Set(
+      validRows
+        .map((r) => r.codigoArticulo?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+
+  for (let i = 0; i < articulos.length; i += LOOKUP_CHUNK) {
+    const chunk = articulos.slice(i, i + LOOKUP_CHUNK);
+    const found = await prisma.producto.findMany({
+      where: {
+        OR: chunk.map((codigoArticulo) => ({
+          codigoArticulo: { equals: codigoArticulo, mode: "insensitive" as const },
+        })),
+      },
+      select: existingProductSelect,
+    });
+
+    for (const product of found) {
+      indexExistingProduct(index, product);
+    }
+  }
+
+  return index;
 }
 
-function classifyRows(
-  validRows: ParsedImportRow[],
-  existingMap: Map<
-    string,
-    {
-      id: string;
-      codigoBarras: string;
-      codigoArticulo: string | null;
-      descripcion: string;
-      unidadMedidaId: string;
-      categoriaId: string | null;
-      activo: boolean;
-    }
-  >
-) {
+function classifyRows(validRows: ParsedImportRow[], index: ExistingProductIndex) {
   let creados = 0;
   let modificados = 0;
   let sinCambios = 0;
@@ -226,7 +287,7 @@ function classifyRows(
   const toUpdate: { id: string; row: ParsedImportRow }[] = [];
 
   for (const row of validRows) {
-    const existing = existingMap.get(row.codigoBarras.toLowerCase());
+    const existing = findExistingProduct(row, index);
     if (!existing) {
       creados++;
       toCreate.push(row);
@@ -261,10 +322,8 @@ export async function previewProductoImport(
     };
   }
 
-  const existingMap = await loadExistingByBarcodes(
-    validRows.map((r) => r.codigoBarras)
-  );
-  const stats = classifyRows(validRows, existingMap);
+  const existingIndex = await loadExistingForImport(validRows);
+  const stats = classifyRows(validRows, existingIndex);
 
   return {
     creados: stats.creados,
@@ -294,12 +353,10 @@ export async function executeProductoImport(
     };
   }
 
-  const existingMap = await loadExistingByBarcodes(
-    validRows.map((r) => r.codigoBarras)
-  );
+  const existingIndex = await loadExistingForImport(validRows);
   const { sinCambios, toCreate, toUpdate } = classifyRows(
     validRows,
-    existingMap
+    existingIndex
   );
 
   let creadosOk = 0;
