@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FlashMessage } from "@/components/FlashMessage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { CollapsibleList } from "@/components/CollapsibleList";
+import { ProductosPagination } from "@/components/ProductosPagination";
+
+const PRODUCTS_PER_PAGE = 20;
 
 export interface ProductoItem {
   id: string;
@@ -62,12 +64,16 @@ export function ProductosClient() {
   const [productos, setProductos] = useState<ProductoItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
-    limit: 50,
+    limit: PRODUCTS_PER_PAGE,
     total: 0,
     totalPages: 1,
   });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const catalogRef = useRef<HTMLElement>(null);
+  const prevPageRef = useRef(1);
+  const isFirstLoad = useRef(true);
   const [flash, setFlash] = useState<Flash>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -108,12 +114,14 @@ export function ProductosClient() {
     setPage(1);
   }, [debouncedQ]);
 
-  const fetchData = useCallback(async (search: string, p: number) => {
-    setLoading(true);
+  const fetchData = useCallback(async (search: string, p: number, initial = false) => {
+    if (initial) setLoading(true);
+    else setListLoading(true);
+
     const params = new URLSearchParams({
       q: search,
       page: String(p),
-      limit: "50",
+      limit: String(PRODUCTS_PER_PAGE),
     });
 
     const res = await fetch(`/api/productos?${params}`);
@@ -122,12 +130,22 @@ export function ProductosClient() {
       setProductos(data.productos ?? []);
       setPagination(data.pagination);
     }
-    setLoading(false);
+
+    if (initial) setLoading(false);
+    else setListLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchData(debouncedQ, page);
+    fetchData(debouncedQ, page, isFirstLoad.current);
+    isFirstLoad.current = false;
   }, [debouncedQ, page, fetchData]);
+
+  useEffect(() => {
+    if (prevPageRef.current !== page) {
+      catalogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      prevPageRef.current = page;
+    }
+  }, [page]);
 
   function openCreate() {
     setEditing(null);
@@ -270,35 +288,11 @@ export function ProductosClient() {
     setPage(1);
   }
 
-  function renderProductoItem(p: ProductoItem) {
-    return (
-      <>
-        <p className="font-medium text-slate-900">{p.descripcion}</p>
-        <p className="font-mono text-xs text-slate-500">{p.codigoBarras}</p>
-        <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
-          {p.codigoArticulo && <span>Art: {p.codigoArticulo}</span>}
-          <span>{p.unidadMedida}</span>
-          {p.categoria && <span>· {p.categoria}</span>}
-        </div>
-        <div className="mt-2 flex gap-2">
-          <button
-            type="button"
-            onClick={() => openEdit(p)}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteTarget(p)}
-            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600"
-          >
-            Eliminar
-          </button>
-        </div>
-      </>
-    );
+  function handlePageChange(nextPage: number) {
+    setPage(nextPage);
   }
+
+  const searchActive = debouncedQ.trim().length > 0;
 
   return (
     <div className="space-y-4">
@@ -314,13 +308,26 @@ export function ProductosClient() {
         <span className="font-semibold">categorías y unidades</span> en Catálogo →
       </Link>
 
-      <input
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Buscar por código de barras, código artículo o nombre…"
-        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-      />
+      <div className="relative">
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por código de barras, código artículo o nombre…"
+          className="w-full rounded-xl border border-slate-300 py-3 pl-4 pr-10 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+          aria-label="Buscar productos"
+        />
+        {q && (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Limpiar búsqueda"
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -451,51 +458,69 @@ export function ProductosClient() {
         </form>
       )}
 
-      {loading ? (
-        <p className="py-8 text-center text-sm text-slate-500">Cargando…</p>
-      ) : productos.length === 0 && pagination.total === 0 ? (
-        <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-          {debouncedQ.trim() ? "No se encontraron productos." : "No hay productos. Agrega uno o importa desde Excel."}
-        </p>
-      ) : (
-        <>
-          {!debouncedQ.trim() && pagination.total > 0 && (
+      <section ref={catalogRef} className="scroll-mt-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-800">Catálogo</h2>
+          {!loading && pagination.total > 0 && (
             <p className="text-xs text-slate-500">
-              {pagination.total} producto{pagination.total === 1 ? "" : "s"} en total
+              {searchActive ? (
+                <>
+                  {pagination.total.toLocaleString("es-MX")} resultado
+                  {pagination.total === 1 ? "" : "s"} para &ldquo;{debouncedQ.trim()}&rdquo;
+                </>
+              ) : (
+                <>
+                  {pagination.total.toLocaleString("es-MX")} producto
+                  {pagination.total === 1 ? "" : "s"} · Página {page} de{" "}
+                  {pagination.totalPages.toLocaleString("es-MX")}
+                </>
+              )}
             </p>
           )}
-          <CollapsibleList
-            items={productos}
-            getKey={(p) => p.id}
-            forceExpanded={!!debouncedQ.trim()}
-            itemClassName="px-3 py-2.5"
-            renderItem={renderProductoItem}
-          />
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="text-sm font-medium text-blue-600 disabled:opacity-40"
-              >
-                ← Anterior
-              </button>
-              <span className="text-sm text-slate-600">
-                {page}/{pagination.totalPages} ({pagination.total})
-              </span>
-              <button
-                type="button"
-                disabled={page >= pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="text-sm font-medium text-blue-600 disabled:opacity-40"
-              >
-                Siguiente →
-              </button>
+        </div>
+
+        {loading ? (
+          <ProductCatalogSkeleton />
+        ) : productos.length === 0 && pagination.total === 0 ? (
+          <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
+            {searchActive
+              ? "No se encontraron productos con esa búsqueda."
+              : "No hay productos. Agrega uno o importa desde Excel."}
+          </p>
+        ) : (
+          <>
+            <div
+              className={`relative grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${
+                listLoading ? "pointer-events-none opacity-60" : ""
+              }`}
+            >
+              {listLoading && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center">
+                  <span className="rounded-full bg-white px-4 py-2 text-sm text-slate-600 shadow-md ring-1 ring-slate-200">
+                    Cargando…
+                  </span>
+                </div>
+              )}
+              {productos.map((p) => (
+                <ProductoCard
+                  key={p.id}
+                  producto={p}
+                  onEdit={() => openEdit(p)}
+                  onDelete={() => setDeleteTarget(p)}
+                />
+              ))}
             </div>
-          )}
-        </>
-      )}
+
+            <ProductosPagination
+              page={page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={pagination.limit}
+              onPageChange={handlePageChange}
+            />
+          </>
+        )}
+      </section>
 
       <ConfirmDialog
         open={!!importPreview && !!pendingImportFile && importPreview.modificados > 0}
@@ -558,6 +583,71 @@ function ImportErroresList({
           … y {errores.length - 25} error(es) más
         </p>
       )}
+    </div>
+  );
+}
+
+function ProductoCard({
+  producto: p,
+  onEdit,
+  onDelete,
+}: {
+  producto: ProductoItem;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <article className="flex flex-col rounded-xl bg-white p-3 ring-1 ring-slate-200 transition-shadow hover:shadow-md">
+      <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-slate-900">
+        {p.descripcion}
+      </h3>
+      <p className="mt-1.5 truncate font-mono text-xs text-slate-500" title={p.codigoBarras}>
+        {p.codigoBarras}
+      </p>
+      {p.codigoArticulo && (
+        <p className="truncate text-xs text-slate-500" title={p.codigoArticulo}>
+          Art. {p.codigoArticulo}
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-1">
+        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          {p.unidadMedida}
+        </span>
+        {p.categoria && (
+          <span className="max-w-full truncate rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+            {p.categoria}
+          </span>
+        )}
+      </div>
+      <div className="mt-auto flex gap-2 border-t border-slate-100 pt-2.5">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex-1 rounded-lg bg-slate-100 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="flex-1 rounded-lg bg-red-50 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+        >
+          Eliminar
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ProductCatalogSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({ length: PRODUCTS_PER_PAGE }).map((_, i) => (
+        <div
+          key={i}
+          className="h-40 animate-pulse rounded-xl bg-slate-200/70 ring-1 ring-slate-200"
+        />
+      ))}
     </div>
   );
 }

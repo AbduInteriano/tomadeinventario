@@ -12,7 +12,7 @@ export default async function ProductosPage() {
       <AppHeader title="Productos" subtitle={session.user.name ?? undefined} />
       <SupervisorNav currentPath="/supervisor/productos" />
 
-      <main className="mx-auto max-w-lg px-4 py-4">
+      <main className="mx-auto max-w-4xl px-4 py-4">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Link
             href="/supervisor"
