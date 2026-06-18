@@ -141,6 +141,30 @@ export function buildProductoSearchWhere(q: string) {
   };
 }
 
+/** Búsqueda para conteo: códigos (exacto o parcial) y nombre por palabras (AND, sin distinguir mayúsculas). */
+export function buildProductoConteoBuscarWhere(q: string) {
+  const term = q.trim();
+  if (!term) return null;
+
+  const words = term.split(/\s+/).filter(Boolean);
+  const OR: Record<string, unknown>[] = [
+    { codigoBarras: { equals: term, mode: "insensitive" as const } },
+    { codigoArticulo: { equals: term, mode: "insensitive" as const } },
+    { codigoBarras: { contains: term, mode: "insensitive" as const } },
+    { codigoArticulo: { contains: term, mode: "insensitive" as const } },
+  ];
+
+  if (words.length > 0) {
+    OR.push({
+      AND: words.map((w) => ({
+        descripcion: { contains: w, mode: "insensitive" as const },
+      })),
+    });
+  }
+
+  return { activo: true, OR };
+}
+
 export function productoDataChanged(
   existing: {
     codigoBarras: string;

@@ -116,7 +116,13 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
       setMessage(data.error ?? "Error al finalizar");
       return;
     }
+    router.refresh();
     await refreshList();
+  }
+
+  function verConteo(id: string) {
+    router.refresh();
+    router.push(`/tomador/area/${id}`);
   }
 
   async function descargarSeleccionados() {
@@ -161,21 +167,23 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
     }
     if (allowManage && (a.estado === "EN_PROGRESO" || a.estado === "PAUSADA")) {
       return (
-        <Link
-          href={`/tomador/area/${a.id}`}
+        <button
+          type="button"
+          onClick={() => verConteo(a.id)}
           className="block w-full rounded-lg bg-blue-600 py-2.5 text-center text-sm font-semibold text-white"
         >
           {a.estado === "PAUSADA" ? "Reanudar conteo" : "Continuar conteo"}
-        </Link>
+        </button>
       );
     }
     return (
-      <Link
-        href={`/tomador/area/${a.id}`}
+      <button
+        type="button"
+        onClick={() => verConteo(a.id)}
         className="block w-full rounded-lg border border-slate-200 py-2.5 text-center text-sm font-medium text-slate-700"
       >
         Ver conteo
-      </Link>
+      </button>
     );
   }
 
@@ -262,12 +270,13 @@ export function TomadorDashboardClient({ isSupervisor }: TomadorDashboardClientP
             {isSupervisor && !a.esPropia ? ` · ${a.usuarioNombre}` : ""}
           </p>
         </div>
-        <Link
-          href={`/tomador/area/${a.id}`}
+        <button
+          type="button"
+          onClick={() => verConteo(a.id)}
           className="shrink-0 text-sm text-blue-600"
         >
           Ver
-        </Link>
+        </button>
       </li>
     );
   }

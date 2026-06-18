@@ -9,6 +9,9 @@ import { ConteoAreaClient } from "@/components/ConteoAreaClient";
 import { canAccessSupervisor } from "@/lib/roles";
 import { AsignacionEstado } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ConteoAreaPage({
   params,
 }: {
@@ -55,6 +58,7 @@ export default async function ConteoAreaPage({
         producto: {
           select: {
             codigoBarras: true,
+            codigoArticulo: true,
             descripcion: true,
             unidadMedida: { select: { abreviatura: true } },
           },
@@ -98,6 +102,7 @@ export default async function ConteoAreaPage({
       </div>
 
       <ConteoAreaClient
+        key={`${asignacion.id}-${asignacion.estado}`}
         asignacionId={asignacion.id}
         areaNombre={asignacion.area.nombre}
         puntoNombre={asignacion.area.punto.nombre}
@@ -107,6 +112,7 @@ export default async function ConteoAreaPage({
           id: c.id,
           productoId: c.productoId,
           codigoBarras: c.producto.codigoBarras,
+          codigoArticulo: c.producto.codigoArticulo,
           descripcion: c.producto.descripcion,
           unidadMedida: c.producto.unidadMedida.abreviatura,
           cantidadContada: formatCantidad(c.cantidadContada),

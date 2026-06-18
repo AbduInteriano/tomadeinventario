@@ -17,6 +17,7 @@ interface ConteoItem {
   id: string;
   productoId: string;
   codigoBarras: string;
+  codigoArticulo: string | null;
   descripcion: string;
   unidadMedida: string;
   cantidadContada: string;
@@ -74,8 +75,29 @@ function codigoYaContado(
   const norm = codigo.trim().toLowerCase();
   if (productoId && conteos.some((c) => c.productoId === productoId)) return true;
   if (conteos.some((c) => c.codigoBarras.toLowerCase() === norm)) return true;
+  if (conteos.some((c) => (c.codigoArticulo ?? "").toLowerCase() === norm)) return true;
   if (noCatalogados.some((n) => n.codigoEscaneado.toLowerCase() === norm)) return true;
   return false;
+}
+
+function filtrarRegistros(registros: RegistroLinea[], q: string): RegistroLinea[] {
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return registros;
+
+  return registros.filter((linea) => {
+    const haystack =
+      linea.kind === "catalogado"
+        ? [
+            linea.item.descripcion,
+            linea.item.codigoBarras,
+            linea.item.codigoArticulo ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+        : [linea.item.descripcionLibre, linea.item.codigoEscaneado].join(" ").toLowerCase();
+
+    return terms.every((t) => haystack.includes(t));
+  });
 }
 
 export function ConteoAreaClient({
@@ -105,13 +127,25 @@ export function ConteoAreaClient({
     cantidad: string;
     descripcion?: string;
   } | null>(null);
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<ProductoEncontrado[] | null>(
+    null
+  );
+  const [filtroRegistros, setFiltroRegistros] = useState("");
+
+  const estadoEfectivo =
+    estadoInicial === "COMPLETADA" || estado === "COMPLETADA" ? "COMPLETADA" : estado;
 
   const registros = useMemo(
     () => mergeRegistros(conteos, noCatalogados),
     [conteos, noCatalogados]
   );
 
-  const puedeEditar = estado === "EN_PROGRESO" && !soloLectura;
+  const registrosVisibles = useMemo(
+    () => filtrarRegistros(registros, filtroRegistros),
+    [registros, filtroRegistros]
+  );
+
+  const puedeEditar = estadoEfectivo === "EN_PROGRESO" && !soloLectura;
 
   async function descargarExcel() {
     setExportando(true);
@@ -149,6 +183,7 @@ export function ConteoAreaClient({
 
   const abrirPendiente = useCallback((action: PendingAction) => {
     setDuplicateAlert(null);
+    setResultadosBusqueda(null);
     setPending(action);
     setCantidad("1");
     if (action.type === "no-catalogado") {
@@ -156,6 +191,24 @@ export function ConteoAreaClient({
     }
     setShowScanner(false);
   }, []);
+
+  const seleccionarProducto = useCallback(
+    (producto: ProductoEncontrado, codigo: string) => {
+      const action: PendingAction = {
+        type: "catalogado",
+        producto,
+        codigo,
+      };
+      if (codigoYaContado(codigo, producto.id, conteos, noCatalogados)) {
+        setResultadosBusqueda(null);
+        setDuplicateAlert(action);
+        setShowScanner(false);
+        return;
+      }
+      abrirPendiente(action);
+    },
+    [abrirPendiente, conteos, noCatalogados]
+  );
 
   const procesarCodigo = useCallback(
     async (codigo: string) => {
@@ -165,10 +218,11 @@ export function ConteoAreaClient({
       setLoading(true);
       setMessage(null);
       setDuplicateAlert(null);
+      setResultadosBusqueda(null);
 
       try {
         const res = await fetch(
-          `/api/productos/buscar?codigo=${encodeURIComponent(trimmed)}`
+          `/api/productos/buscar?q=${encodeURIComponent(trimmed)}`
         );
         const data = await res.json().catch(() => null);
 
@@ -176,7 +230,7 @@ export function ConteoAreaClient({
           const msg =
             data && typeof data.error === "string"
               ? data.error
-              : `No se pudo buscar el código (${res.status}). Reintenta o ingresa manualmente.`;
+              : `No se pudo buscar (${res.status}). Reintenta o ingresa manualmente.`;
           setMessage({ type: "err", text: msg });
           return;
         }
@@ -190,18 +244,14 @@ export function ConteoAreaClient({
         }
 
         if (data.encontrado) {
-          const producto = data.producto as ProductoEncontrado;
-          const action: PendingAction = {
-            type: "catalogado",
-            producto,
-            codigo: trimmed,
-          };
-          if (codigoYaContado(trimmed, producto.id, conteos, noCatalogados)) {
-            setDuplicateAlert(action);
+          if (data.multiple && Array.isArray(data.productos)) {
+            setResultadosBusqueda(data.productos as ProductoEncontrado[]);
             setShowScanner(false);
             return;
           }
-          abrirPendiente(action);
+
+          const producto = data.producto as ProductoEncontrado;
+          seleccionarProducto(producto, trimmed);
         } else {
           const action: PendingAction = { type: "no-catalogado", codigo: trimmed };
           if (codigoYaContado(trimmed, null, conteos, noCatalogados)) {
@@ -223,7 +273,7 @@ export function ConteoAreaClient({
         setLoading(false);
       }
     },
-    [abrirPendiente, conteos, noCatalogados]
+    [abrirPendiente, conteos, noCatalogados, seleccionarProducto]
   );
 
   async function guardarConteo() {
@@ -261,6 +311,7 @@ export function ConteoAreaClient({
           id: saved.id,
           productoId: saved.productoId,
           codigoBarras: saved.codigoBarras,
+          codigoArticulo: pending.producto.codigoArticulo,
           descripcion: saved.descripcion,
           unidadMedida: saved.unidadMedida,
           cantidadContada: saved.cantidadContada,
@@ -479,6 +530,7 @@ export function ConteoAreaClient({
       }
       setEstado("COMPLETADA");
       setMessage({ type: "ok", text: "Toma finalizada correctamente" });
+      router.refresh();
       router.push("/tomador");
     } catch (err) {
       setMessage({
@@ -490,9 +542,9 @@ export function ConteoAreaClient({
     }
   }
 
-  const puedeEscanear = estado === "EN_PROGRESO" && !soloLectura;
-  const bloqueado = estado === "COMPLETADA" || soloLectura;
-  const puedeGestionar = !soloLectura && estado !== "COMPLETADA";
+  const puedeEscanear = estadoEfectivo === "EN_PROGRESO" && !soloLectura;
+  const bloqueado = estadoEfectivo === "COMPLETADA" || soloLectura;
+  const puedeGestionar = !soloLectura && estadoEfectivo !== "COMPLETADA";
 
   function renderLinea(linea: RegistroLinea, index: number) {
     const isEditing =
@@ -509,6 +561,9 @@ export function ConteoAreaClient({
           >
             <p className="truncate text-sm font-medium text-slate-900">{c.descripcion}</p>
             <p className="text-xs text-slate-500">{c.codigoBarras}</p>
+            {c.codigoArticulo && (
+              <p className="text-xs text-slate-500">Art. {c.codigoArticulo}</p>
+            )}
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="text"
@@ -555,6 +610,9 @@ export function ConteoAreaClient({
               {c.descripcion}
             </p>
             <p className="text-xs text-slate-500">{c.codigoBarras}</p>
+            {c.codigoArticulo && (
+              <p className="text-xs text-slate-500">Art. {c.codigoArticulo}</p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-sm font-semibold text-blue-600">
@@ -692,7 +750,7 @@ export function ConteoAreaClient({
           <span>
             {registros.length} {registros.length === 1 ? "registro" : "registros"}
           </span>
-          {(registros.length > 0 || estado === "COMPLETADA") && (
+          {(registros.length > 0 || estadoEfectivo === "COMPLETADA") && (
             <button
               type="button"
               onClick={descargarExcel}
@@ -704,8 +762,14 @@ export function ConteoAreaClient({
           )}
         </div>
 
-        {soloLectura && estado !== "COMPLETADA" && (
+        {soloLectura && estadoEfectivo !== "COMPLETADA" && (
           <p className="text-xs text-slate-500">Solo lectura</p>
+        )}
+
+        {estadoEfectivo === "COMPLETADA" && (
+          <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+            Toma finalizada — solo consulta y descarga Excel.
+          </p>
         )}
 
         {!bloqueado && estado === "PENDIENTE" && puedeGestionar && (
@@ -746,7 +810,7 @@ export function ConteoAreaClient({
                 type="text"
                 inputMode="text"
                 autoComplete="off"
-                placeholder="Código manual"
+                placeholder="Código, artículo o nombre…"
                 value={codigoManual}
                 onChange={(e) => setCodigoManual(e.target.value)}
                 onKeyDown={(e) => {
@@ -778,13 +842,52 @@ export function ConteoAreaClient({
           </div>
         )}
 
+        {resultadosBusqueda && resultadosBusqueda.length > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-white ring-1 ring-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+              <p className="text-xs font-medium text-slate-600">
+                {resultadosBusqueda.length} coincidencia
+                {resultadosBusqueda.length === 1 ? "" : "s"} — elige una
+              </p>
+              <button
+                type="button"
+                onClick={() => setResultadosBusqueda(null)}
+                className="text-xs text-slate-500"
+              >
+                Cerrar
+              </button>
+            </div>
+            <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+              {resultadosBusqueda.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => seleccionarProducto(p, p.codigoBarras)}
+                    className="w-full px-3 py-2.5 text-left active:bg-blue-50"
+                  >
+                    <p className="truncate text-sm font-medium text-slate-900">{p.descripcion}</p>
+                    <p className="text-xs text-slate-500">
+                      {p.codigoBarras}
+                      {p.codigoArticulo ? ` · Art. ${p.codigoArticulo}` : ""} · {p.unidadMedida}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {pending && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
             {pending.type === "catalogado" ? (
               <>
                 <p className="font-medium text-slate-900">{pending.producto.descripcion}</p>
                 <p className="text-xs text-slate-500">
-                  {pending.producto.codigoBarras} · {pending.producto.unidadMedida}
+                  {pending.producto.codigoBarras}
+                  {pending.producto.codigoArticulo
+                    ? ` · Art. ${pending.producto.codigoArticulo}`
+                    : ""}{" "}
+                  · {pending.producto.unidadMedida}
                 </p>
               </>
             ) : (
@@ -830,16 +933,31 @@ export function ConteoAreaClient({
           </div>
         )}
 
+        {registros.length > 0 && (
+          <input
+            type="search"
+            value={filtroRegistros}
+            onChange={(e) => setFiltroRegistros(e.target.value)}
+            placeholder="Filtrar registros por código, artículo o nombre…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600"
+            aria-label="Filtrar registros del conteo"
+          />
+        )}
+
         {registros.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-500">Sin registros aún</p>
+        ) : registrosVisibles.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            Ningún registro coincide con &ldquo;{filtroRegistros.trim()}&rdquo;
+          </p>
         ) : (
           <ul className="divide-y divide-slate-100 rounded-lg bg-white ring-1 ring-slate-200">
-            {registros.map((linea, index) => renderLinea(linea, index))}
+            {registrosVisibles.map((linea, index) => renderLinea(linea, index))}
           </ul>
         )}
       </div>
 
-      {!bloqueado && estado === "EN_PROGRESO" && puedeGestionar && (
+      {!bloqueado && estadoEfectivo === "EN_PROGRESO" && puedeGestionar && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 py-2">
           <div className="mx-auto flex max-w-lg justify-center gap-4 text-sm">
             <button
