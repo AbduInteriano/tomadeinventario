@@ -68,11 +68,13 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
+      comentario: c.comentario,
     })),
     noCatalogados: asignacion.noCatalogados.map((n) => ({
       codigoEscaneado: n.codigoEscaneado,
       descripcionLibre: n.descripcionLibre,
       cantidad: n.cantidad,
+      comentario: n.comentario,
     })),
     });
 

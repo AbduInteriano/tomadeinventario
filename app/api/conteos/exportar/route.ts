@@ -83,11 +83,13 @@ export async function POST(request: NextRequest) {
       descripcion: c.producto.descripcion,
       unidadMedida: c.producto.unidadMedida.abreviatura,
       cantidadContada: c.cantidadContada,
+      comentario: c.comentario,
     })),
     noCatalogados: a.noCatalogados.map((n) => ({
       codigoEscaneado: n.codigoEscaneado,
       descripcionLibre: n.descripcionLibre,
       cantidad: n.cantidad,
+      comentario: n.comentario,
     })),
   }));
 

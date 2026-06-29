@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeNombre } from "@/lib/api-auth";
 import { productoInclude } from "@/lib/catalogo";
+import { stripLeadingZerosNumerico } from "@/lib/codigo";
 
 export const EXCEL_HEADERS = [
   "Código Barras",
@@ -63,7 +64,13 @@ export const productoSelect = {
 } as const;
 
 export function normalizeCodigoBarras(value: string): string {
-  return value.trim();
+  return stripLeadingZerosNumerico(value.trim());
+}
+
+export function normalizeCodigoArticulo(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return stripLeadingZerosNumerico(trimmed);
 }
 
 export function validateProductoInput(
@@ -94,7 +101,7 @@ export function validateProductoInput(
     return { error: "La unidad de medida es obligatoria" };
   }
 
-  const codigoArticulo = input.codigoArticulo?.trim() || null;
+  const codigoArticulo = normalizeCodigoArticulo(input.codigoArticulo);
   const categoriaId = input.categoriaId?.trim() || null;
 
   return {
@@ -147,12 +154,20 @@ export function buildProductoConteoBuscarWhere(q: string) {
   if (!term) return null;
 
   const words = term.split(/\s+/).filter(Boolean);
+  const normalized = stripLeadingZerosNumerico(term);
   const OR: Record<string, unknown>[] = [
     { codigoBarras: { equals: term, mode: "insensitive" as const } },
     { codigoArticulo: { equals: term, mode: "insensitive" as const } },
     { codigoBarras: { contains: term, mode: "insensitive" as const } },
     { codigoArticulo: { contains: term, mode: "insensitive" as const } },
   ];
+
+  if (normalized !== term) {
+    OR.push(
+      { codigoBarras: { equals: normalized, mode: "insensitive" as const } },
+      { codigoArticulo: { equals: normalized, mode: "insensitive" as const } }
+    );
+  }
 
   if (words.length > 0) {
     OR.push({
@@ -237,10 +252,7 @@ export function cellToString(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) {
     const int = Math.trunc(value);
     if (int >= 0 && int < 1e13) {
-      const s = String(int);
-      if (s.length <= 8) return s.padStart(8, "0");
-      if (s.length < 13) return s.padStart(13, "0");
-      return s;
+      return String(int);
     }
     return String(value);
   }

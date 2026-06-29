@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { normalizeNombre } from "@/lib/api-auth";
 import {
   cellToString,
+  normalizeCodigoArticulo,
+  normalizeCodigoBarras,
   productoDataChanged,
   validateProductoInput,
   type ProductoInput,
@@ -166,8 +168,8 @@ function resolveImportRow(
   }
 
   const validated = validateProductoInput({
-    codigoBarras: cellToString(row[0]),
-    codigoArticulo: cellToString(row[1]) || null,
+    codigoBarras: normalizeCodigoBarras(cellToString(row[0])),
+    codigoArticulo: normalizeCodigoArticulo(cellToString(row[1])),
     descripcion: cellToString(row[2]),
     unidadMedidaId: unidad.id,
     categoriaId: categoria.id,

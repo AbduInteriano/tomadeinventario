@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     asignacionId: string;
     productoId: string;
     cantidad: string | number;
+    comentario?: string | null;
   };
 
   try {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const { asignacionId, productoId, cantidad } = body;
+  const { asignacionId, productoId, cantidad, comentario } = body;
 
   if (!asignacionId || !productoId || cantidad == null) {
     return NextResponse.json(
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
   }
 
   const cantidadDecimal = parsedCantidad.decimal;
+  const comentarioTexto = comentario?.trim() || null;
 
   try {
     const conteo = await prisma.$transaction(async (tx) => {
@@ -81,12 +83,14 @@ export async function POST(request: NextRequest) {
           asignacionId,
           productoId,
           cantidadContada: cantidadDecimal,
+          comentario: comentarioTexto,
           usuarioId: session.user.id,
         },
         select: {
           id: true,
           productoId: true,
           cantidadContada: true,
+          comentario: true,
           timestamp: true,
           producto: {
             select: {
@@ -106,6 +110,7 @@ export async function POST(request: NextRequest) {
       descripcion: conteo.producto.descripcion,
       unidadMedida: conteo.producto.unidadMedida.abreviatura,
       cantidadContada: formatCantidad(conteo.cantidadContada),
+      comentario: conteo.comentario,
       timestamp: conteo.timestamp,
     });
   } catch (err) {

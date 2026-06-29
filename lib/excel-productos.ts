@@ -34,8 +34,8 @@ export async function createProductoTemplateBuffer(
 
   if (catalogo.unidades.length > 0 && catalogo.categorias.length > 0) {
     sheet.addRow([
-      "0000000000001",
-      "ART-001",
+      "1",
+      "5465",
       "Producto de ejemplo",
       catalogo.unidades[0].abreviatura,
       catalogo.categorias[0].nombre,

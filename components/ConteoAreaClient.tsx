@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { validateCantidadInput } from "@/lib/cantidad-input";
 
 interface ProductoEncontrado {
@@ -21,6 +22,7 @@ interface ConteoItem {
   descripcion: string;
   unidadMedida: string;
   cantidadContada: string;
+  comentario: string | null;
   timestamp: string;
 }
 
@@ -29,6 +31,7 @@ interface NoCatalogadoItem {
   codigoEscaneado: string;
   descripcionLibre: string;
   cantidad: string;
+  comentario: string | null;
   timestamp: string;
 }
 
@@ -116,6 +119,7 @@ export function ConteoAreaClient({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [duplicateAlert, setDuplicateAlert] = useState<DuplicateAlert | null>(null);
   const [cantidad, setCantidad] = useState("1");
+  const [comentario, setComentario] = useState("");
   const [descripcionLibre, setDescripcionLibre] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -126,7 +130,9 @@ export function ConteoAreaClient({
     id: string;
     cantidad: string;
     descripcion?: string;
+    comentario: string;
   } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RegistroLinea | null>(null);
   const [resultadosBusqueda, setResultadosBusqueda] = useState<ProductoEncontrado[] | null>(
     null
   );
@@ -186,6 +192,7 @@ export function ConteoAreaClient({
     setResultadosBusqueda(null);
     setPending(action);
     setCantidad("1");
+    setComentario("");
     if (action.type === "no-catalogado") {
       setDescripcionLibre("");
     }
@@ -298,6 +305,7 @@ export function ConteoAreaClient({
             asignacionId,
             productoId: producto.id,
             cantidad: parsed.normalized,
+            comentario: comentario.trim() || null,
           }),
         });
 
@@ -315,6 +323,7 @@ export function ConteoAreaClient({
           descripcion: saved.descripcion,
           unidadMedida: saved.unidadMedida,
           cantidadContada: saved.cantidadContada,
+          comentario: saved.comentario ?? null,
           timestamp:
             typeof saved.timestamp === "string"
               ? saved.timestamp
@@ -340,6 +349,7 @@ export function ConteoAreaClient({
             codigoEscaneado: pending.codigo,
             descripcionLibre: descripcionLibre.trim(),
             cantidad: parsed.normalized,
+            comentario: comentario.trim() || null,
           }),
         });
 
@@ -354,6 +364,7 @@ export function ConteoAreaClient({
           codigoEscaneado: saved.codigoEscaneado,
           descripcionLibre: saved.descripcionLibre,
           cantidad: saved.cantidad,
+          comentario: saved.comentario ?? null,
           timestamp:
             typeof saved.timestamp === "string"
               ? saved.timestamp
@@ -381,6 +392,7 @@ export function ConteoAreaClient({
         kind: "catalogado",
         id: linea.item.id,
         cantidad: linea.item.cantidadContada,
+        comentario: linea.item.comentario ?? "",
       });
     } else {
       setEditing({
@@ -388,6 +400,7 @@ export function ConteoAreaClient({
         id: linea.item.id,
         cantidad: linea.item.cantidad,
         descripcion: linea.item.descripcionLibre,
+        comentario: linea.item.comentario ?? "",
       });
     }
   }
@@ -408,7 +421,10 @@ export function ConteoAreaClient({
         const res = await fetch(`/api/conteos/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cantidad: parsed.normalized }),
+          body: JSON.stringify({
+            cantidad: parsed.normalized,
+            comentario: editing.comentario.trim() || null,
+          }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -421,6 +437,7 @@ export function ConteoAreaClient({
               ? {
                   ...c,
                   cantidadContada: saved.cantidadContada,
+                  comentario: saved.comentario ?? null,
                   timestamp:
                     typeof saved.timestamp === "string"
                       ? saved.timestamp
@@ -439,7 +456,11 @@ export function ConteoAreaClient({
         const res = await fetch(`/api/conteos/no-catalogado/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cantidad: parsed.normalized, descripcionLibre: desc }),
+          body: JSON.stringify({
+            cantidad: parsed.normalized,
+            descripcionLibre: desc,
+            comentario: editing.comentario.trim() || null,
+          }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -453,6 +474,7 @@ export function ConteoAreaClient({
                   ...n,
                   cantidad: saved.cantidad,
                   descripcionLibre: saved.descripcionLibre,
+                  comentario: saved.comentario ?? null,
                   timestamp:
                     typeof saved.timestamp === "string"
                       ? saved.timestamp
@@ -463,11 +485,46 @@ export function ConteoAreaClient({
         );
       }
       setEditing(null);
-      setMessage({ type: "ok", text: "Cantidad actualizada" });
+      setMessage({ type: "ok", text: "Registro actualizado" });
     } catch (err) {
       setMessage({
         type: "err",
         text: err instanceof Error ? err.message : "Error al actualizar",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function eliminarRegistro() {
+    if (!deleteTarget) return;
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const url =
+        deleteTarget.kind === "catalogado"
+          ? `/api/conteos/${deleteTarget.item.id}`
+          : `/api/conteos/no-catalogado/${deleteTarget.item.id}`;
+
+      const res = await fetch(url, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Error al eliminar");
+      }
+
+      if (deleteTarget.kind === "catalogado") {
+        setConteos((prev) => prev.filter((c) => c.id !== deleteTarget.item.id));
+      } else {
+        setNoCatalogados((prev) => prev.filter((n) => n.id !== deleteTarget.item.id));
+      }
+      if (editing?.id === deleteTarget.item.id) setEditing(null);
+      setDeleteTarget(null);
+      setMessage({ type: "ok", text: "Registro eliminado" });
+    } catch (err) {
+      setMessage({
+        type: "err",
+        text: err instanceof Error ? err.message : "Error al eliminar",
       });
     } finally {
       setLoading(false);
@@ -559,11 +616,18 @@ export function ConteoAreaClient({
             key={c.id}
             className="bg-blue-50/60 px-3 py-2"
           >
-            <p className="truncate text-sm font-medium text-slate-900">{c.descripcion}</p>
+            <p className="break-words text-sm font-medium text-slate-900">{c.descripcion}</p>
             <p className="text-xs text-slate-500">{c.codigoBarras}</p>
             {c.codigoArticulo && (
               <p className="text-xs text-slate-500">Art. {c.codigoArticulo}</p>
             )}
+            <input
+              type="text"
+              value={editing.comentario}
+              onChange={(e) => setEditing({ ...editing, comentario: e.target.value })}
+              placeholder="Comentario (opcional)"
+              className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            />
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="text"
@@ -598,10 +662,10 @@ export function ConteoAreaClient({
       return (
         <li
           key={c.id}
-          className={`flex items-start justify-between gap-2 px-3 py-2 ${esUltimo ? "bg-blue-50/40" : ""}`}
+          className={`flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between ${esUltimo ? "bg-blue-50/40" : ""}`}
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-slate-900">
+            <p className="break-words text-sm font-medium text-slate-900">
               {esUltimo && (
                 <span className="mr-1.5 text-[10px] font-bold uppercase text-blue-600">
                   Último
@@ -613,19 +677,33 @@ export function ConteoAreaClient({
             {c.codigoArticulo && (
               <p className="text-xs text-slate-500">Art. {c.codigoArticulo}</p>
             )}
+            {c.comentario && (
+              <p className="mt-1 break-words text-xs text-slate-600">
+                <span className="font-medium">Comentario:</span> {c.comentario}
+              </p>
+            )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="text-sm font-semibold text-blue-600">
               {c.cantidadContada} {c.unidadMedida}
             </span>
             {puedeEditar && (
-              <button
-                type="button"
-                onClick={() => iniciarEdicion(linea)}
-                className="text-xs text-slate-500 underline"
-              >
-                Editar
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => iniciarEdicion(linea)}
+                  className="text-xs text-slate-500 underline"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(linea)}
+                  className="text-xs text-red-600 underline"
+                >
+                  Eliminar
+                </button>
+              </div>
             )}
           </div>
         </li>
@@ -642,6 +720,13 @@ export function ConteoAreaClient({
             value={editing.descripcion ?? ""}
             onChange={(e) => setEditing({ ...editing, descripcion: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          />
+          <input
+            type="text"
+            value={editing.comentario}
+            onChange={(e) => setEditing({ ...editing, comentario: e.target.value })}
+            placeholder="Comentario (opcional)"
+            className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
           />
           <div className="mt-2 flex items-center gap-2">
             <input
@@ -675,10 +760,10 @@ export function ConteoAreaClient({
     return (
       <li
         key={n.id}
-        className={`flex items-start justify-between gap-2 px-3 py-2 ${esUltimo ? "bg-amber-50/80" : "bg-amber-50/30"}`}
+        className={`flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between ${esUltimo ? "bg-amber-50/80" : "bg-amber-50/30"}`}
       >
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-slate-900">
+          <p className="break-words text-sm text-slate-900">
             {esUltimo && (
               <span className="mr-1.5 text-[10px] font-bold uppercase text-amber-700">
                 Último
@@ -687,17 +772,31 @@ export function ConteoAreaClient({
             {n.descripcionLibre}
           </p>
           <p className="text-xs text-amber-700">{n.codigoEscaneado} · no cat.</p>
+          {n.comentario && (
+            <p className="mt-1 break-words text-xs text-slate-600">
+              <span className="font-medium">Comentario:</span> {n.comentario}
+            </p>
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-sm font-semibold text-slate-700">{n.cantidad}</span>
           {puedeEditar && (
-            <button
-              type="button"
-              onClick={() => iniciarEdicion(linea)}
-              className="text-xs text-slate-500 underline"
-            >
-              Editar
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => iniciarEdicion(linea)}
+                className="text-xs text-slate-500 underline"
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(linea)}
+                className="text-xs text-red-600 underline"
+              >
+                Eliminar
+              </button>
+            </div>
           )}
         </div>
       </li>
@@ -865,7 +964,7 @@ export function ConteoAreaClient({
                     onClick={() => seleccionarProducto(p, p.codigoBarras)}
                     className="w-full px-3 py-2.5 text-left active:bg-blue-50"
                   >
-                    <p className="truncate text-sm font-medium text-slate-900">{p.descripcion}</p>
+                    <p className="break-words text-sm font-medium text-slate-900">{p.descripcion}</p>
                     <p className="text-xs text-slate-500">
                       {p.codigoBarras}
                       {p.codigoArticulo ? ` · Art. ${p.codigoArticulo}` : ""} · {p.unidadMedida}
@@ -881,7 +980,7 @@ export function ConteoAreaClient({
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
             {pending.type === "catalogado" ? (
               <>
-                <p className="font-medium text-slate-900">{pending.producto.descripcion}</p>
+                <p className="break-words font-medium text-slate-900">{pending.producto.descripcion}</p>
                 <p className="text-xs text-slate-500">
                   {pending.producto.codigoBarras}
                   {pending.producto.codigoArticulo
@@ -930,6 +1029,13 @@ export function ConteoAreaClient({
                 {loading ? "…" : "Guardar"}
               </button>
             </div>
+            <input
+              type="text"
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              placeholder="Comentario (opcional)"
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
           </div>
         )}
 
@@ -979,6 +1085,21 @@ export function ConteoAreaClient({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Eliminar registro"
+        message={
+          deleteTarget
+            ? deleteTarget.kind === "catalogado"
+              ? `¿Eliminar «${deleteTarget.item.descripcion}» de esta toma?`
+              : `¿Eliminar «${deleteTarget.item.descripcionLibre}» de esta toma?`
+            : ""
+        }
+        loading={loading}
+        onConfirm={eliminarRegistro}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

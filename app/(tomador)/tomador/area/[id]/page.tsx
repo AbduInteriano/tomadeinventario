@@ -54,6 +54,7 @@ export default async function ConteoAreaPage({
         id: true,
         productoId: true,
         cantidadContada: true,
+        comentario: true,
         timestamp: true,
         producto: {
           select: {
@@ -73,6 +74,7 @@ export default async function ConteoAreaPage({
         codigoEscaneado: true,
         descripcionLibre: true,
         cantidad: true,
+        comentario: true,
         timestamp: true,
       },
       orderBy: { timestamp: "desc" },
@@ -116,6 +118,7 @@ export default async function ConteoAreaPage({
           descripcion: c.producto.descripcion,
           unidadMedida: c.producto.unidadMedida.abreviatura,
           cantidadContada: formatCantidad(c.cantidadContada),
+          comentario: c.comentario,
           timestamp: c.timestamp.toISOString(),
         }))}
         noCatalogadosIniciales={noCatalogados.map((n) => ({
@@ -123,6 +126,7 @@ export default async function ConteoAreaPage({
           codigoEscaneado: n.codigoEscaneado,
           descripcionLibre: n.descripcionLibre,
           cantidad: formatCantidad(n.cantidad),
+          comentario: n.comentario,
           timestamp: n.timestamp.toISOString(),
         }))}
       />

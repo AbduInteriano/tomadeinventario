@@ -1,0 +1,2 @@
+DELETE FROM "_prisma_migrations"
+WHERE migration_name = '20260629181217_npm_run_db_normalize_codigosnpm_run_db_normalize_codigos';

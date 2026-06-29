@@ -7,12 +7,14 @@ export const CONTEO_EXCEL_HEADERS = [
   "Descripción",
   "Unidad",
   "Cantidad contada",
+  "Comentario",
 ] as const;
 
 export const NO_CATALOGADO_EXCEL_HEADERS = [
   "Código escaneado",
   "Descripción",
   "Cantidad",
+  "Comentario",
 ] as const;
 
 export interface ConteoExportRow {
@@ -21,12 +23,14 @@ export interface ConteoExportRow {
   descripcion: string;
   unidadMedida: string;
   cantidadContada: { toNumber(): number } | number;
+  comentario?: string | null;
 }
 
 export interface NoCatalogadoExportRow {
   codigoEscaneado: string;
   descripcionLibre: string;
   cantidad: { toNumber(): number } | number;
+  comentario?: string | null;
 }
 
 export interface ConteoExportBlock {
@@ -53,6 +57,7 @@ function addConteoRows(sheet: ExcelJS.Worksheet, conteos: ConteoExportRow[]) {
       c.descripcion,
       c.unidadMedida,
       formatCantidad(c.cantidadContada),
+      c.comentario ?? "",
     ]);
   }
 }
@@ -81,6 +86,7 @@ function addNoCatalogadoRows(sheet: ExcelJS.Worksheet, rows: NoCatalogadoExportR
       n.codigoEscaneado,
       n.descripcionLibre,
       formatCantidad(n.cantidad),
+      n.comentario ?? "",
     ]);
   }
 }

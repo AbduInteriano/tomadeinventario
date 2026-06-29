@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     codigoEscaneado: string;
     descripcionLibre: string;
     cantidad: string | number;
+    comentario?: string | null;
   };
 
   try {
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const { asignacionId, codigoEscaneado, descripcionLibre, cantidad } = body;
+  const { asignacionId, codigoEscaneado, descripcionLibre, cantidad, comentario } = body;
   const codigo = codigoEscaneado?.trim();
 
   if (!asignacionId || !codigo || !descripcionLibre?.trim()) {
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
 
   const cantidadDecimal = parsedCantidad.decimal;
   const descripcion = descripcionLibre.trim();
+  const comentarioTexto = comentario?.trim() || null;
 
   try {
     const registro = await prisma.$transaction(async (tx) => {
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
           codigoEscaneado: codigo,
           descripcionLibre: descripcion,
           cantidad: cantidadDecimal,
+          comentario: comentarioTexto,
           usuarioId: session.user.id,
         },
       });
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
       codigoEscaneado: registro.codigoEscaneado,
       descripcionLibre: registro.descripcionLibre,
       cantidad: formatCantidad(registro.cantidad),
+      comentario: registro.comentario,
       timestamp: registro.timestamp,
     });
   } catch (err) {
